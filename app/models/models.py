@@ -67,8 +67,8 @@ class Apartment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
-    utility_readings = relationship("UtilityReading", back_populates="apartment")
-    maintenance_records = relationship("MaintenanceRecord", back_populates="apartment")
+    utility_readings = relationship("UtilityReading", back_populates="apartment", cascade="all, delete-orphan")
+    maintenance_records = relationship("MaintenanceRecord", back_populates="apartment", cascade="all, delete-orphan")
     leases = relationship("Lease", back_populates="apartment")
     invoices = relationship("Invoice", back_populates="apartment")
 
@@ -179,4 +179,52 @@ class Invoice(Base):
     month = Column(Integer)
     year = Column(Integer)
     issue_date = Column(Date)
-    due_date = Co
+    due_date = Column(Date)
+    subtotal = Column(Float)
+    tax = Column(Float)
+    total = Column(Float)
+    is_paid = Column(Boolean, default=False)
+    payment_date = Column(Date, nullable=True)
+    payment_method = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    reminder_sent = Column(Boolean, default=False)
+    reminder_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relazioni
+    lease = relationship("Lease", back_populates="invoices")
+    tenant = relationship("Tenant", back_populates="invoices")
+    apartment = relationship("Apartment", back_populates="invoices")
+    items = relationship("InvoiceItem", back_populates="invoice")
+    payments = relationship("PaymentRecord", back_populates="invoice")
+
+class InvoiceItem(Base):
+    __tablename__ = "invoice_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    description = Column(String)
+    amount = Column(Float)
+    type = Column(String)  # 'rent', 'electricity', 'water', 'gas', 'maintenance', 'other'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relazioni
+    invoice = relationship("Invoice", back_populates="items")
+
+class PaymentRecord(Base):
+    __tablename__ = "payment_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    amount = Column(Float)
+    payment_date = Column(Date)
+    payment_method = Column(String)  # 'cash', 'bank_transfer', 'credit_card', 'check'
+    reference = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relazioni
+    invoice = relationship("Invoice", back_populates="payments")

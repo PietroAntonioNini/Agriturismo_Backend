@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date
 from pydantic import BaseModel, EmailStr, validator, Field
 
+
 # ------------------ SCHEMA UTILITY READING ------------------
 class UtilityReadingBase(BaseModel):
     apartment_id: int
@@ -33,6 +34,7 @@ class UtilityReading(UtilityReadingBase):
     class Config:
         orm_mode = True
 
+
 # ------------------ SCHEMA MAINTENANCE RECORD ------------------
 class MaintenanceRecordBase(BaseModel):
     apartment_id: int
@@ -53,6 +55,7 @@ class MaintenanceRecord(MaintenanceRecordBase):
 
     class Config:
         orm_mode = True
+
 
 # ------------------ SCHEMA APARTMENT ------------------
 class ApartmentBase(BaseModel):
@@ -86,13 +89,24 @@ class Apartment(ApartmentBase):
     class Config:
         orm_mode = True
 
+
 # ------------------ SCHEMA TENANT ------------------
-class CommunicationPreferences(BaseModel):
+# Base model that converts camelCase to snake_case and vice versa
+class CamelCaseModel(BaseModel):
+    class Config:
+        # This works in both Pydantic v1 and v2
+        populate_by_name = True  # Allow populating by alias
+        alias_generator = lambda s: ''.join(word.capitalize() if i else word 
+                                           for i, word in enumerate(s.split('_')))
+
+# Now use this as the base for all your models
+class CommunicationPreferences(CamelCaseModel):
     email: bool = True
     sms: bool = True
     whatsapp: bool = False
 
-class TenantBase(BaseModel):
+# Update your TenantBase model
+class TenantBase(CamelCaseModel):
     first_name: str
     last_name: str
     email: Optional[str] = None
@@ -105,6 +119,16 @@ class TenantBase(BaseModel):
     address: Optional[str] = None
     communication_preferences: CommunicationPreferences
     notes: Optional[str] = None
+    
+    # Add a validator to handle ISO date strings
+    @validator('document_expiry_date', pre=True)
+    def parse_date(cls, value):
+        if isinstance(value, str):
+            # Handle ISO format with time
+            if 'T' in value:
+                value = value.split('T')[0]
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        return value
 
 class TenantCreate(TenantBase):
     pass
@@ -115,7 +139,9 @@ class Tenant(TenantBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        orm_mode = True  # For Pydantic v1
+        from_attributes = True  # For Pydantic v2
+
 
 # ------------------ SCHEMA LEASE DOCUMENT ------------------
 class LeaseDocumentBase(BaseModel):
@@ -136,6 +162,7 @@ class LeaseDocument(LeaseDocumentBase):
     class Config:
         orm_mode = True
 
+
 # ------------------ SCHEMA LEASE PAYMENT ------------------
 class LeasePaymentBase(BaseModel):
     lease_id: int
@@ -155,6 +182,7 @@ class LeasePayment(LeasePaymentBase):
 
     class Config:
         orm_mode = True
+
 
 # ------------------ SCHEMA LEASE ------------------
 class LeaseBase(BaseModel):
@@ -183,6 +211,7 @@ class Lease(LeaseBase):
     class Config:
         orm_mode = True
 
+
 # ------------------ SCHEMA INVOICE ITEM ------------------
 class InvoiceItemBase(BaseModel):
     invoice_id: int
@@ -200,6 +229,7 @@ class InvoiceItem(InvoiceItemBase):
 
     class Config:
         orm_mode = True
+
 
 # ------------------ SCHEMA PAYMENT RECORD ------------------
 class PaymentRecordBase(BaseModel):
@@ -220,6 +250,7 @@ class PaymentRecord(PaymentRecordBase):
 
     class Config:
         orm_mode = True
+
 
 # ------------------ SCHEMA INVOICE ------------------
 class InvoiceBase(BaseModel):
@@ -254,6 +285,7 @@ class Invoice(InvoiceBase):
     class Config:
         orm_mode = True
 
+
 # ------------------ SCHEMA USER ------------------
 class UserBase(BaseModel):
     username: str
@@ -274,6 +306,7 @@ class User(UserBase):
 
     class Config:
         orm_mode = True
+
 
 # ------------------ SCHEMA UTILITY SUMMARY ------------------
 class UtilitySummary(BaseModel):

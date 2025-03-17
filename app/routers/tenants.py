@@ -39,28 +39,70 @@ def create_tenant(tenant: schemas.TenantCreate, db: Session = Depends(get_db)):
 # POST create tenant with images
 @router.post("/with-images", response_model=schemas.Tenant, status_code=status.HTTP_201_CREATED)
 async def create_tenant_with_images(
-    tenant: str = Form(...),
-    files: List[UploadFile] = File(None),
-    fileFieldPrefix: Optional[str] = Form("file"),
+    tenants: str = Form(...),
+    document0: UploadFile = File(None),
+    document1: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    tenant_data = json.loads(tenant)
-    tenant_obj = schemas.TenantCreate(**tenant_data)
+    try:
+        # Log received data for debugging
+        print(f"Received tenants data: {tenants}")
+        print(f"Received files: document0={document0 and document0.filename}, document1={document1 and document1.filename}")
+        
+        # Parse the tenant data
+        tenant_data = json.loads(tenants)
+        
+        # Handle date format conversion for documentExpiryDate
+        if "documentExpiryDate" in tenant_data and tenant_data["documentExpiryDate"]:
+            # Convert ISO format to date object
+            expiry_date_str = tenant_data["documentExpiryDate"]
+            if "T" in expiry_date_str:  # If it's in ISO format with time
+                expiry_date_str = expiry_date_str.split("T")[0]  # Extract just the date part
+            tenant_data["document_expiry_date"] = expiry_date_str
+        
+        # Handle communication preferences
+        if "communicationPreferences" in tenant_data:
+            tenant_data["communication_preferences"] = tenant_data.pop("communicationPreferences")
+        
+        # Convert camelCase to snake_case for all fields
+        converted_data = {}
+        for key, value in tenant_data.items():
+            # Convert camelCase to snake_case
+            snake_key = ''.join(['_'+c.lower() if c.isupper() else c for c in key]).lstrip('_')
+            converted_data[snake_key] = value
+        
+        print(f"Converted data: {converted_data}")
+        
+        # Create tenant object with converted data
+        tenant_obj = schemas.TenantCreate(**converted_data)
+        
+        # Create the tenant first
+        new_tenant = service.create_tenant(db, tenant_obj)
+        
+        # Handle document images if provided
+        if document0:
+            doc_url = await service.save_tenant_document(new_tenant.id, document0, "front")
+            new_tenant = service.update_tenant_document(db, new_tenant.id, doc_url, "front")
+        
+        if document1:
+            doc_url = await service.save_tenant_document(new_tenant.id, document1, "back")
+            new_tenant = service.update_tenant_document(db, new_tenant.id, doc_url, "back")
+        
+        return new_tenant
     
-    # Create the tenant first
-    new_tenant = service.create_tenant(db, tenant_obj)
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
     
-    # Handle document images if provided
-    if files and len(files) > 0:
-        for i, file in enumerate(files):
-            if fileFieldPrefix == "documentFront" and i == 0:
-                doc_url = await service.save_tenant_document(new_tenant.id, file, "front")
-                new_tenant = service.update_tenant_document(db, new_tenant.id, doc_url, "front")
-            elif fileFieldPrefix == "documentBack" and i == 0:
-                doc_url = await service.save_tenant_document(new_tenant.id, file, "back")
-                new_tenant = service.update_tenant_document(db, new_tenant.id, doc_url, "back")
+    except ValidationError as e:
+        print(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     
-    return new_tenant
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # PUT update tenant
 @router.put("/{tenant_id}", response_model=schemas.Tenant)

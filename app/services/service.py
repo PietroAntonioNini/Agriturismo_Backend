@@ -286,9 +286,14 @@ def get_tenant(db: Session, tenant_id: int):
 
 def create_tenant(db: Session, tenant: schemas.TenantCreate):
     # Convert Pydantic model to dict
-    tenant_data = tenant.dict()
+    tenant_data = tenant.dict() if hasattr(tenant, "dict") else dict(tenant)
+    
     # Handle nested dict for communication_preferences
-    tenant_data["communication_preferences"] = tenant_data["communication_preferences"].dict()
+    if "communication_preferences" in tenant_data:
+        # Check if it's a Pydantic model or already a dict
+        if hasattr(tenant_data["communication_preferences"], "dict"):
+            tenant_data["communication_preferences"] = tenant_data["communication_preferences"].dict()
+        # If it's already a dict, leave it as is
     
     db_tenant = models.Tenant(**tenant_data)
     db.add(db_tenant)
