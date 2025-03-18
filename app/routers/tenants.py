@@ -1,8 +1,10 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Query, status, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
 from datetime import datetime
+from fastapi.responses import FileResponse
 
 from app.database import get_db
 from app.models import models
@@ -156,6 +158,38 @@ async def update_tenant_with_images(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+
+# GET download tenant document
+@router.get("/{tenantId}/documents/download/{doc_type}", response_class=FileResponse)
+async def download_tenant_document(
+    tenantId: int,
+    doc_type: str,
+    db: Session = Depends(get_db)
+):
+    tenant = service.get_tenant(db, tenantId)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    if doc_type not in ["front", "back"]:
+        raise HTTPException(status_code=400, detail="Document type must be 'front' or 'back'")
+    
+    # Ottieni il percorso del file
+    file_path = None
+    if doc_type == "front" and tenant.documentFrontImage:
+        file_path = f"static{tenant.documentFrontImage}"
+    elif doc_type == "back" and tenant.documentBackImage:
+        file_path = f"static{tenant.documentBackImage}"
+    
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Restituisci il file
+    return FileResponse(
+        path=file_path,
+        filename=os.path.basename(file_path),
+        media_type="image/png"  # Adatta in base al tipo di file effettivo
+    )
 
 # DELETE tenant
 @router.delete("/{tenantId}", status_code=status.HTTP_204_NO_CONTENT)
