@@ -2,47 +2,50 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date
 from pydantic import BaseModel, EmailStr, validator, Field
 
+# Base model that converts camelCase to snake_case and vice versa
+class CamelCaseModel(BaseModel):
+    class Config:
+        populate_by_name = True
+        alias_generator = lambda s: ''.join(word.capitalize() if i else word for i, word in enumerate(s.split('_')))
+        orm_mode = True
+        from_attributes = True
 
 # ------------------ SCHEMA UTILITY READING ------------------
-class UtilityReadingBase(BaseModel):
-    apartment_id: int
-    type: str  # 'electricity', 'water', 'gas'
-    reading_date: date
-    previous_reading: float
-    current_reading: float
+class UtilityReadingBase(CamelCaseModel):
+    apartmentId: int
+    type: str
+    readingDate: date
+    previousReading: float
+    currentReading: float
     consumption: float
-    unit_cost: float
-    total_cost: float
-    is_paid: bool = False
+    unitCost: float
+    totalCost: float
+    isPaid: bool = False
     notes: Optional[str] = None
-    electricity_consumption: Optional[float] = None
-    water_consumption: Optional[float] = None
-    gas_consumption: Optional[float] = None
-    electricity_cost: Optional[float] = None
-    water_cost: Optional[float] = None
-    gas_cost: Optional[float] = None
+    electricityConsumption: Optional[float] = None
+    waterConsumption: Optional[float] = None
+    gasConsumption: Optional[float] = None
+    electricityCost: Optional[float] = None
+    waterCost: Optional[float] = None
+    gasCost: Optional[float] = None
 
 class UtilityReadingCreate(UtilityReadingBase):
     pass
 
 class UtilityReading(UtilityReadingBase):
     id: int
-    paid_date: Optional[date] = None
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    paidDate: Optional[date] = None
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA MAINTENANCE RECORD ------------------
-class MaintenanceRecordBase(BaseModel):
-    apartment_id: int
-    type: str  # 'repair', 'inspection', 'upgrade', 'cleaning'
+class MaintenanceRecordBase(CamelCaseModel):
+    apartmentId: int
+    type: str
     description: str
     cost: float
     date: date
-    completed_by: str
+    completedBy: str
     notes: Optional[str] = None
 
 class MaintenanceRecordCreate(MaintenanceRecordBase):
@@ -50,29 +53,25 @@ class MaintenanceRecordCreate(MaintenanceRecordBase):
 
 class MaintenanceRecord(MaintenanceRecordBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA APARTMENT ------------------
-class ApartmentBase(BaseModel):
+class ApartmentBase(CamelCaseModel):
     name: str
     description: Optional[str] = None
     floor: int
-    square_meters: float
+    squareMeters: float
     rooms: int
     bathrooms: int
-    has_balcony: bool = False
-    has_parking: bool = False
-    is_furnished: bool = False
-    monthly_rent: float
-    status: str  # 'available', 'occupied', 'maintenance'
-    is_available: Optional[bool] = True
+    hasBalcony: bool = False
+    hasParking: bool = False
+    isFurnished: bool = False
+    monthlyRent: float
+    status: str
+    isAvailable: Optional[bool] = True
     notes: Optional[str] = None
-    utility_meters_info: Optional[Dict[str, str]] = None
+    utilityMetersInfo: Optional[Dict[str, str]] = None
     amenities: Optional[List[str]] = None
     images: Optional[List[str]] = None
 
@@ -81,50 +80,34 @@ class ApartmentCreate(ApartmentBase):
 
 class Apartment(ApartmentBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-    utility_readings: Optional[List[UtilityReading]] = []
-    maintenance_records: Optional[List[MaintenanceRecord]] = []
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
+    utilityReadings: Optional[List[UtilityReading]] = []
+    maintenanceRecords: Optional[List[MaintenanceRecord]] = []
 
 # ------------------ SCHEMA TENANT ------------------
-# Base model that converts camelCase to snake_case and vice versa
-class CamelCaseModel(BaseModel):
-    class Config:
-        # This works in both Pydantic v1 and v2
-        populate_by_name = True  # Allow populating by alias
-        alias_generator = lambda s: ''.join(word.capitalize() if i else word 
-                                           for i, word in enumerate(s.split('_')))
-
-# Now use this as the base for all your models
 class CommunicationPreferences(CamelCaseModel):
     email: bool = True
     sms: bool = True
     whatsapp: bool = False
 
-# Update your TenantBase model
 class TenantBase(CamelCaseModel):
-    first_name: str
-    last_name: str
+    firstName: str
+    lastName: str
     email: Optional[str] = None
     phone: str
-    document_type: str
-    document_number: str
-    document_expiry_date: date
-    document_front_image: Optional[str] = None
-    document_back_image: Optional[str] = None
+    documentType: str
+    documentNumber: str
+    documentExpiryDate: date
+    documentFrontImage: Optional[str] = None
+    documentBackImage: Optional[str] = None
     address: Optional[str] = None
-    communication_preferences: CommunicationPreferences
+    communicationPreferences: CommunicationPreferences
     notes: Optional[str] = None
     
-    # Add a validator to handle ISO date strings
-    @validator('document_expiry_date', pre=True)
+    @validator('documentExpiryDate', pre=True)
     def parse_date(cls, value):
         if isinstance(value, str):
-            # Handle ISO format with time
             if 'T' in value:
                 value = value.split('T')[0]
             return datetime.strptime(value, '%Y-%m-%d').date()
@@ -135,40 +118,31 @@ class TenantCreate(TenantBase):
 
 class Tenant(TenantBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True  # For Pydantic v1
-        from_attributes = True  # For Pydantic v2
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA LEASE DOCUMENT ------------------
-class LeaseDocumentBase(BaseModel):
-    lease_id: int
+class LeaseDocumentBase(CamelCaseModel):
+    leaseId: int
     name: str
     type: str
     url: str
-    upload_date: date
+    uploadDate: date
 
 class LeaseDocumentCreate(LeaseDocumentBase):
     pass
 
 class LeaseDocument(LeaseDocumentBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA LEASE PAYMENT ------------------
-class LeasePaymentBase(BaseModel):
-    lease_id: int
+class LeasePaymentBase(CamelCaseModel):
+    leaseId: int
     amount: float
-    payment_date: date
-    payment_type: str
+    paymentDate: date
+    paymentType: str
     reference: str
     notes: Optional[str] = None
 
@@ -177,25 +151,21 @@ class LeasePaymentCreate(LeasePaymentBase):
 
 class LeasePayment(LeasePaymentBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA LEASE ------------------
-class LeaseBase(BaseModel):
-    tenant_id: int
-    apartment_id: int
-    start_date: date
-    end_date: date
-    monthly_rent: float
-    security_deposit: float
-    is_active: bool = True
-    payment_due_day: int
-    terms_and_conditions: str
-    special_clauses: Optional[str] = None
+class LeaseBase(CamelCaseModel):
+    tenantId: int
+    apartmentId: int
+    startDate: date
+    endDate: date
+    monthlyRent: float
+    securityDeposit: float
+    isActive: bool = True
+    paymentDueDay: int
+    termsAndConditions: str
+    specialClauses: Optional[str] = None
     notes: Optional[str] = None
 
 class LeaseCreate(LeaseBase):
@@ -203,40 +173,32 @@ class LeaseCreate(LeaseBase):
 
 class Lease(LeaseBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
+    createdAt: datetime
+    updatedAt: datetime
     documents: Optional[List[LeaseDocument]] = []
     payments: Optional[List[LeasePayment]] = []
 
-    class Config:
-        orm_mode = True
-
-
 # ------------------ SCHEMA INVOICE ITEM ------------------
-class InvoiceItemBase(BaseModel):
-    invoice_id: int
+class InvoiceItemBase(CamelCaseModel):
+    invoiceId: int
     description: str
     amount: float
-    type: str  # 'rent', 'electricity', 'water', 'gas', 'maintenance', 'other'
+    type: str
 
 class InvoiceItemCreate(InvoiceItemBase):
     pass
 
 class InvoiceItem(InvoiceItemBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA PAYMENT RECORD ------------------
-class PaymentRecordBase(BaseModel):
-    invoice_id: int
+class PaymentRecordBase(CamelCaseModel):
+    invoiceId: int
     amount: float
-    payment_date: date
-    payment_method: str  # 'cash', 'bank_transfer', 'credit_card', 'check'
+    paymentDate: date
+    paymentMethod: str
     reference: Optional[str] = None
     notes: Optional[str] = None
 
@@ -245,96 +207,84 @@ class PaymentRecordCreate(PaymentRecordBase):
 
 class PaymentRecord(PaymentRecordBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA INVOICE ------------------
-class InvoiceBase(BaseModel):
-    lease_id: int
-    tenant_id: int
-    apartment_id: int
-    invoice_number: str
+class InvoiceBase(CamelCaseModel):
+    leaseId: int
+    tenantId: int
+    apartmentId: int
+    invoiceNumber: str
     month: int
     year: int
-    issue_date: date
-    due_date: date
+    issueDate: date
+    dueDate: date
     subtotal: float
     tax: float
     total: float
-    is_paid: bool = False
-    payment_date: Optional[date] = None
-    payment_method: Optional[str] = None  # 'cash', 'bank_transfer', 'credit_card', 'check'
+    isPaid: bool = False
+    paymentDate: Optional[date] = None
+    paymentMethod: Optional[str] = None
     notes: Optional[str] = None
-    reminder_sent: bool = False
-    reminder_date: Optional[date] = None
+    reminderSent: bool = False
+    reminderDate: Optional[date] = None
 
 class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate]
 
 class Invoice(InvoiceBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
+    createdAt: datetime
+    updatedAt: datetime
     items: List[InvoiceItem] = []
     payments: List[PaymentRecord] = []
 
-    class Config:
-        orm_mode = True
-
-
 # ------------------ SCHEMA USER ------------------
-class UserBase(BaseModel):
+class UserBase(CamelCaseModel):
     username: str
     email: EmailStr
-    first_name: str
-    last_name: str
-    role: str  # 'admin', 'manager', 'staff'
-    is_active: bool = True
+    firstName: str
+    lastName: str
+    role: str
+    isActive: bool = True
 
 class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
     id: int
-    last_login: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
+    lastLogin: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
 
 # ------------------ SCHEMA UTILITY SUMMARY ------------------
-class UtilitySummary(BaseModel):
-    apartment_id: int
+class UtilitySummary(CamelCaseModel):
+    apartmentId: int
     month: int
     year: int
     electricity: dict
     water: dict
     gas: dict
-    total_cost: float
+    totalCost: float
 
-class MonthlyUtilityData(BaseModel):
+class MonthlyUtilityData(CamelCaseModel):
     month: int
     year: int
-    apartment_id: int
-    apartment_name: str
+    apartmentId: int
+    apartmentName: str
     electricity: float
     water: float
     gas: float
 
-class ApartmentUtilityData(BaseModel):
-    apartment_id: int
-    apartment_name: str
-    monthly_data: List[dict]
+class ApartmentUtilityData(CamelCaseModel):
+    apartmentId: int
+    apartmentName: str
+    monthlyData: List[dict]
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+class Token(CamelCaseModel):
+    accessToken: str
+    tokenType: str
 
-class TokenData(BaseModel):
+class TokenData(CamelCaseModel):
     username: Optional[str] = None

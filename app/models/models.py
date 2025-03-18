@@ -25,8 +25,8 @@ class UtilityType(str, enum.Enum):
 
 class PaymentMethod(str, enum.Enum):
     cash = "cash"
-    bank_transfer = "bank_transfer"
-    credit_card = "credit_card"
+    bankTransfer = "bank transfer"
+    creditCard = "credit card"
     check = "check"
 
 class InvoiceItemType(str, enum.Enum):
@@ -50,25 +50,25 @@ class Apartment(Base):
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
     floor = Column(Integer)
-    square_meters = Column(Float)
+    squareMeters = Column(Float)
     rooms = Column(Integer)
     bathrooms = Column(Integer)
-    has_balcony = Column(Boolean, default=False)
-    has_parking = Column(Boolean, default=False)
-    is_furnished = Column(Boolean, default=False)
-    monthly_rent = Column(Float)
+    hasBalcony = Column(Boolean, default=False)
+    hasParking = Column(Boolean, default=False)
+    isFurnished = Column(Boolean, default=False)
+    monthlyRent = Column(Float)
     status = Column(String, default="available")
-    is_available = Column(Boolean, default=True)
+    isAvailable = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
-    utility_meters_info = Column(JSON, nullable=True)
+    utilityMeters_info = Column(JSON, nullable=True)
     amenities = Column(JSON, nullable=True)  # Array di stringhe
     images = Column(JSON, nullable=True)  # Array di URL di immagini
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
-    utility_readings = relationship("UtilityReading", back_populates="apartment", cascade="all, delete-orphan")
-    maintenance_records = relationship("MaintenanceRecord", back_populates="apartment", cascade="all, delete-orphan")
+    utilityReadings = relationship("UtilityReading", back_populates="apartment", cascade="all, delete-orphan")
+    maintenanceRecords = relationship("MaintenanceRecord", back_populates="apartment", cascade="all, delete-orphan")
     leases = relationship("Lease", back_populates="apartment")
     invoices = relationship("Invoice", back_populates="apartment")
 
@@ -76,37 +76,37 @@ class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    apartment_id = Column(Integer, ForeignKey("apartments.id"))
+    apartmentId = Column(Integer, ForeignKey("apartments.id"))
     type = Column(String)  # 'repair', 'inspection', 'upgrade', 'cleaning'
     description = Column(Text)
     cost = Column(Float)
     date = Column(Date)
-    completed_by = Column(String)
+    completedBy = Column(String)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
-    apartment = relationship("Apartment", back_populates="maintenance_records")
+    apartment = relationship("Apartment", back_populates="maintenanceRecords")
 
 class Tenant(Base):
     __tablename__ = "tenants"
 
     id = Column(Integer, primary_key=True, index=True)
-    first_name = Column(String)
-    last_name = Column(String)
+    firstName = Column(String)
+    lastName = Column(String)
     email = Column(String, nullable=True)
     phone = Column(String)
-    document_type = Column(String)
-    document_number = Column(String)
-    document_expiry_date = Column(Date)
-    document_front_image = Column(String, nullable=True)
-    document_back_image = Column(String, nullable=True)
+    documentType = Column(String)
+    documentNumber = Column(String)
+    documentExpiryDate = Column(Date)
+    documentFrontImage = Column(String, nullable=True)
+    documentBackImage = Column(String, nullable=True)
     address = Column(String, nullable=True)
-    communication_preferences = Column(JSON)  # { email: true, sms: true, whatsapp: true }
+    communicationPreferences = Column(JSON)  # { email: true, sms: true, whatsapp: true }
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     leases = relationship("Lease", back_populates="tenant")
@@ -116,19 +116,19 @@ class Lease(Base):
     __tablename__ = "leases"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"))
-    apartment_id = Column(Integer, ForeignKey("apartments.id"))
-    start_date = Column(Date)
-    end_date = Column(Date)
-    monthly_rent = Column(Float)
-    security_deposit = Column(Float)
-    is_active = Column(Boolean, default=True)
-    payment_due_day = Column(Integer)
-    terms_and_conditions = Column(Text)
-    special_clauses = Column(Text, nullable=True)
+    tenantId = Column(Integer, ForeignKey("tenants.id"))
+    apartmentId = Column(Integer, ForeignKey("apartments.id"))
+    startDate = Column(Date)
+    endDate = Column(Date)
+    monthlyRent = Column(Float)
+    securityDeposit = Column(Float)
+    isActive = Column(Boolean, default=True)
+    paymentDueDay = Column(Integer)
+    termsAndConditions = Column(Text)
+    specialClauses = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     tenant = relationship("Tenant", back_populates="leases")
@@ -141,13 +141,13 @@ class LeaseDocument(Base):
     __tablename__ = "lease_documents"
 
     id = Column(Integer, primary_key=True, index=True)
-    lease_id = Column(Integer, ForeignKey("leases.id"))
+    leaseId = Column(Integer, ForeignKey("leases.id"))
     name = Column(String)
     type = Column(String)
     url = Column(String)
-    upload_date = Column(Date)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    uploadDate = Column(Date)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     lease = relationship("Lease", back_populates="documents")
@@ -156,14 +156,14 @@ class LeasePayment(Base):
     __tablename__ = "lease_payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    lease_id = Column(Integer, ForeignKey("leases.id"))
+    leaseId = Column(Integer, ForeignKey("leases.id"))
     amount = Column(Float)
-    payment_date = Column(Date)
-    payment_type = Column(String)
+    paymentDate = Column(Date)
+    paymentType = Column(String)
     reference = Column(String)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     lease = relationship("Lease", back_populates="payments")
@@ -189,8 +189,8 @@ class Invoice(Base):
     notes = Column(Text, nullable=True)
     reminder_sent = Column(Boolean, default=False)
     reminder_date = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     lease = relationship("Lease", back_populates="invoices")
@@ -203,12 +203,12 @@ class InvoiceItem(Base):
     __tablename__ = "invoice_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    invoiceId = Column(Integer, ForeignKey("invoices.id"))
     description = Column(String)
     amount = Column(Float)
     type = Column(String)  # 'rent', 'electricity', 'water', 'gas', 'maintenance', 'other'
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     invoice = relationship("Invoice", back_populates="items")
@@ -217,14 +217,53 @@ class PaymentRecord(Base):
     __tablename__ = "payment_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    invoiceId = Column(Integer, ForeignKey("invoices.id"))
     amount = Column(Float)
-    payment_date = Column(Date)
-    payment_method = Column(String)  # 'cash', 'bank_transfer', 'credit_card', 'check'
+    paymentDate = Column(Date)
+    paymentMethod = Column(String)  # 'cash', 'bank_transfer', 'credit_card', 'check'
     reference = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relazioni
     invoice = relationship("Invoice", back_populates="payments")
+
+class UtilityReading(Base):
+    __tablename__ = "utility_readings"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Relazione con Apartment
+    apartmentId = Column(Integer, ForeignKey("apartments.id"), nullable=False)
+    apartment = relationship("Apartment", back_populates="utilityReadings")
+
+    # Tipologia di lettura (electricity, water, gas)
+    type = Column(String, nullable=False)
+
+    # Date e campi di consumo
+    readingDate = Column(Date, nullable=False)
+    previousReading = Column(Float, default=0.0)
+    currentReading = Column(Float, default=0.0)
+    consumption = Column(Float, default=0.0)
+    unitCost = Column(Float, default=0.0)
+    totalCost = Column(Float, default=0.0)
+
+    # Stato del pagamento
+    isPaid = Column(Boolean, default=False)
+    paidDate = Column(Date, nullable=True)
+
+    # Eventuali note
+    notes = Column(Text, nullable=True)
+
+    # Altri campi opzionali per consumi/costi specifici
+    electricityConsumption = Column(Float, nullable=True)
+    waterConsumption = Column(Float, nullable=True)
+    gasConsumption = Column(Float, nullable=True)
+    electricityCost = Column(Float, nullable=True)
+    waterCost = Column(Float, nullable=True)
+    gasCost = Column(Float, nullable=True)
+
+    # Timestamp
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

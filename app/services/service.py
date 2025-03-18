@@ -356,9 +356,9 @@ def update_tenant_document(db: Session, tenant_id: int, doc_url: str, doc_type: 
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
     if db_tenant:
         if doc_type == "front":
-            db_tenant.document_front_image = doc_url
+            db_tenant.documentFrontImage = doc_url
         elif doc_type == "back":
-            db_tenant.document_back_image = doc_url
+            db_tenant.documentBackImage = doc_url
         
         db_tenant.updated_at = datetime.utcnow()
         db.commit()

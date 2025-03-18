@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Query, status, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
@@ -117,35 +117,56 @@ def update_tenant(
     return service.update_tenant(db, tenant_id, tenant)
 
 # PUT update tenant with images
+# PUT update tenant with images
 @router.put("/{tenant_id}/with-images", response_model=schemas.Tenant)
 async def update_tenant_with_images(
     tenant_id: int,
     tenant: str = Form(...),
-    files: List[UploadFile] = File(None),
-    fileFieldPrefix: Optional[str] = Form("file"),
+    documentFrontImage: UploadFile = File(None),
+    documentBackImage: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    existing_tenant = service.get_tenant(db, tenant_id)
-    if existing_tenant is None:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    tenant_data = json.loads(tenant)
-    tenant_obj = schemas.TenantCreate(**tenant_data)
-    
-    # Update the tenant data
-    updated_tenant = service.update_tenant(db, tenant_id, tenant_obj)
-    
-    # Handle document images if provided
-    if files and len(files) > 0:
-        for i, file in enumerate(files):
-            if fileFieldPrefix == "documentFront" and i == 0:
-                doc_url = await service.save_tenant_document(tenant_id, file, "front")
-                updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "front")
-            elif fileFieldPrefix == "documentBack" and i == 0:
-                doc_url = await service.save_tenant_document(tenant_id, file, "back")
-                updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "back")
-    
-    return updated_tenant
+    try:
+        # Log received data for debugging
+        print(f"Received tenant data: {tenant}")
+        print(f"Received files: front={documentFrontImage and documentFrontImage.filename}, back={documentBackImage and documentBackImage.filename}")
+        
+        existing_tenant = service.get_tenant(db, tenant_id)
+        if existing_tenant is None:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        
+        tenant_data = json.loads(tenant)
+        
+        # Handle date format conversion for documentExpiryDate if needed
+        if "documentExpiryDate" in tenant_data and tenant_data["documentExpiryDate"]:
+            # Convert ISO format to date object
+            expiry_date_str = tenant_data["documentExpiryDate"]
+            if "T" in expiry_date_str:  # If it's in ISO format with time
+                expiry_date_str = expiry_date_str.split("T")[0]  # Extract just the date part
+            tenant_data["documentExpiryDate"] = expiry_date_str
+        
+        # Create tenant object with data
+        tenant_obj = schemas.TenantCreate(**tenant_data)
+        
+        # Update the tenant data
+        updated_tenant = service.update_tenant(db, tenant_id, tenant_obj)
+        
+        # Handle document images if provided
+        if documentFrontImage:
+            doc_url = await service.save_tenant_document(tenant_id, documentFrontImage, "front")
+            updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "front")
+        
+        if documentBackImage:
+            doc_url = await service.save_tenant_document(tenant_id, documentBackImage, "back")
+            updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "back")
+        
+        return updated_tenant
+        
+    except Exception as e:
+        print(f"Error updating tenant with images: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # DELETE tenant
 @router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
