@@ -60,7 +60,7 @@ class Apartment(Base):
     status = Column(String, default="available")
     isAvailable = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
-    utilityMeters_info = Column(JSON, nullable=True)
+    utilityMetersInfo = Column(JSON, nullable=True)
     amenities = Column(JSON, nullable=True)  # Array di stringhe
     images = Column(JSON, nullable=True)  # Array di URL di immagini
     createdAt = Column(DateTime, default=datetime.utcnow)
@@ -172,23 +172,23 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, index=True)
-    lease_id = Column(Integer, ForeignKey("leases.id"))
-    tenant_id = Column(Integer, ForeignKey("tenants.id"))
-    apartment_id = Column(Integer, ForeignKey("apartments.id"))
-    invoice_number = Column(String, index=True)
+    leaseId = Column(Integer, ForeignKey("leases.id"))
+    tenantId = Column(Integer, ForeignKey("tenants.id"))
+    apartmentId = Column(Integer, ForeignKey("apartments.id"))
+    invoiceNumber = Column(String, index=True)
     month = Column(Integer)
     year = Column(Integer)
-    issue_date = Column(Date)
-    due_date = Column(Date)
+    issueDate = Column(Date)
+    dueDate = Column(Date)
     subtotal = Column(Float)
     tax = Column(Float)
     total = Column(Float)
-    is_paid = Column(Boolean, default=False)
-    payment_date = Column(Date, nullable=True)
-    payment_method = Column(String, nullable=True)
+    isPaid = Column(Boolean, default=False)
+    paymentDate = Column(Date, nullable=True)
+    paymentMethod = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
-    reminder_sent = Column(Boolean, default=False)
-    reminder_date = Column(Date, nullable=True)
+    reminderSent = Column(Boolean, default=False)
+    reminderDate = Column(Date, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -220,7 +220,7 @@ class PaymentRecord(Base):
     invoiceId = Column(Integer, ForeignKey("invoices.id"))
     amount = Column(Float)
     paymentDate = Column(Date)
-    paymentMethod = Column(String)  # 'cash', 'bank_transfer', 'credit_card', 'check'
+    paymentMethod = Column(String)  # 'cash', 'bankTransfer', 'creditCard', 'check'
     reference = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)

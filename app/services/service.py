@@ -18,38 +18,38 @@ def get_apartments(
     db: Session, 
     skip: int = 0, 
     limit: int = 100, 
-    is_available: Optional[bool] = None,
+    isAvailable: Optional[bool] = None,
     status: Optional[str] = None,
     floor: Optional[int] = None,
-    min_rooms: Optional[int] = None,
-    max_price: Optional[float] = None,
-    has_balcony: Optional[bool] = None,
-    has_parking: Optional[bool] = None,
-    is_furnished: Optional[bool] = None
+    minRooms: Optional[int] = None,
+    maxPrice: Optional[float] = None,
+    hasBalcony: Optional[bool] = None,
+    hasParking: Optional[bool] = None,
+    isFurnished: Optional[bool] = None
 ):
     query = db.query(models.Apartment)
     
-    if is_available is not None:
-        query = query.filter(models.Apartment.is_available == is_available)
+    if isAvailable is not None:
+        query = query.filter(models.Apartment.isAvailable == isAvailable)
     if status:
         query = query.filter(models.Apartment.status == status)
     if floor is not None:
         query = query.filter(models.Apartment.floor == floor)
-    if min_rooms is not None:
-        query = query.filter(models.Apartment.rooms >= min_rooms)
-    if max_price is not None:
-        query = query.filter(models.Apartment.monthly_rent <= max_price)
-    if has_balcony is not None:
-        query = query.filter(models.Apartment.has_balcony == has_balcony)
-    if has_parking is not None:
-        query = query.filter(models.Apartment.has_parking == has_parking)
-    if is_furnished is not None:
-        query = query.filter(models.Apartment.is_furnished == is_furnished)
+    if minRooms is not None:
+        query = query.filter(models.Apartment.rooms >= minRooms)
+    if maxPrice is not None:
+        query = query.filter(models.Apartment.monthlyRent <= maxPrice)
+    if hasBalcony is not None:
+        query = query.filter(models.Apartment.hasBalcony == hasBalcony)
+    if hasParking is not None:
+        query = query.filter(models.Apartment.hasParking == hasParking)
+    if isFurnished is not None:
+        query = query.filter(models.Apartment.isFurnished == isFurnished)
     
     return query.offset(skip).limit(limit).all()
 
-def get_apartment(db: Session, apartment_id: int):
-    return db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+def get_apartment(db: Session, apartmentId: int):
+    return db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
 
 def create_apartment(db: Session, apartment: schemas.ApartmentCreate):
     db_apartment = models.Apartment(**apartment.dict())
@@ -58,47 +58,47 @@ def create_apartment(db: Session, apartment: schemas.ApartmentCreate):
     db.refresh(db_apartment)
     return db_apartment
 
-def update_apartment(db: Session, apartment_id: int, apartment: schemas.ApartmentCreate):
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+def update_apartment(db: Session, apartmentId: int, apartment: schemas.ApartmentCreate):
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         for key, value in apartment.dict().items():
             setattr(db_apartment, key, value)
-        db_apartment.updated_at = datetime.utcnow()
+        db_apartment.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
 
-def delete_apartment(db: Session, apartment_id: int):
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+def delete_apartment(db: Session, apartmentId: int):
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         db.delete(db_apartment)
         db.commit()
         return True
     return False
 
-def update_apartment_status(db: Session, apartment_id: int, status: str):
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+def update_apartment_status(db: Session, apartmentId: int, status: str):
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         db_apartment.status = status
         # Update is_available based on status
-        db_apartment.is_available = status == "available"
-        db_apartment.updated_at = datetime.utcnow()
+        db_apartment.isAvailable = status == "available"
+        db_apartment.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
 
-async def save_apartment_images(apartment_id: int, files: List[UploadFile]):
+async def save_apartment_images(apartmentId: int, files: List[UploadFile]):
     """Save multiple apartment images and return the URLs."""
-    image_urls = []
+    imageUrls = []
     for file in files:
-        image_url = await save_apartment_image(apartment_id, file)
-        image_urls.append(image_url)
-    return image_urls
+        imageUrl = await save_apartment_image(apartmentId, file)
+        imageUrls.append(imageUrl)
+    return imageUrls
 
-async def save_apartment_image(apartment_id: int, file: UploadFile):
+async def save_apartment_image(apartmentId: int, file: UploadFile):
     """Save a single apartment image and return the URL."""
     # Create directory for apartment images if it doesn't exist
-    upload_dir = f"static/apartments/{apartment_id}"
+    upload_dir = f"static/apartments/{apartmentId}"
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
@@ -110,52 +110,52 @@ async def save_apartment_image(apartment_id: int, file: UploadFile):
         shutil.copyfileobj(file.file, buffer)
     
     # Return the URL path
-    return f"/apartments/{apartment_id}/{filename}"
+    return f"/apartments/{apartmentId}/{filename}"
 
-def update_apartment_images(db: Session, apartment_id: int, image_urls: List[str], append: bool = False):
+def update_apartment_images(db: Session, apartmentId: int, imageUrls: List[str], append: bool = False):
     """Update apartment images in the database."""
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         if append and db_apartment.images:
             # Add new images to existing ones
             current_images = db_apartment.images or []
-            db_apartment.images = current_images + image_urls
+            db_apartment.images = current_images + imageUrls
         else:
             # Replace images
-            db_apartment.images = image_urls
+            db_apartment.images = imageUrls
         
-        db_apartment.updated_at = datetime.utcnow()
+        db_apartment.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
 
-def add_apartment_image(db: Session, apartment_id: int, image_url: str):
+def add_apartment_image(db: Session, apartmentId: int, imageUrl: str):
     """Add a single image to an apartment."""
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         if db_apartment.images:
-            db_apartment.images.append(image_url)
+            db_apartment.images.append(imageUrl)
         else:
-            db_apartment.images = [image_url]
+            db_apartment.images = [imageUrl]
         
-        db_apartment.updated_at = datetime.utcnow()
+        db_apartment.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
 
-def delete_apartment_image(db: Session, apartment_id: int, image_name: str):
+def delete_apartment_image(db: Session, apartmentId: int, imageName: str):
     """Delete an image from an apartment."""
-    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment and db_apartment.images:
-        image_url = f"/apartments/{apartment_id}/{image_name}"
-        if image_url in db_apartment.images:
-            db_apartment.images.remove(image_url)
-            db_apartment.updated_at = datetime.utcnow()
+        imageUrl = f"/apartments/{apartmentId}/{imageName}"
+        if imageUrl in db_apartment.images:
+            db_apartment.images.remove(imageUrl)
+            db_apartment.updatedAt = datetime.utcnow()
             db.commit()
             
             # Try to delete the physical file
             try:
-                os.remove(f"static{image_url}")
+                os.remove(f"static{imageUrl}")
             except:
                 pass
             
@@ -172,29 +172,29 @@ def search_apartments(db: Session, query: str):
         )
     ).all()
 
-def get_apartment_tenants(db: Session, apartment_id: int):
+def get_apartment_tenants(db: Session, apartmentId: int):
     """Get all tenants associated with an apartment through active leases."""
     # Query tenants through leases
     tenants = db.query(models.Tenant).join(
         models.Lease, 
-        models.Tenant.id == models.Lease.tenant_id
+        models.Tenant.id == models.Lease.tenantId
     ).filter(
-        models.Lease.apartment_id == apartment_id,
-        models.Lease.is_active == True
+        models.Lease.apartmentId == apartmentId,
+        models.Lease.isActive == True
     ).all()
     
     return tenants
 
 def get_apartment_utilities(
     db: Session, 
-    apartment_id: int, 
+    apartmentId: int, 
     type: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None
 ):
     """Get utility readings for an apartment with optional filters."""
     query = db.query(models.UtilityReading).filter(
-        models.UtilityReading.apartment_id == apartment_id
+        models.UtilityReading.apartmentId == apartmentId
     )
     
     if type:
@@ -202,68 +202,68 @@ def get_apartment_utilities(
     
     if year:
         query = query.filter(
-            db.extract('year', models.UtilityReading.reading_date) == year
+            db.extract('year', models.UtilityReading.readingDate) == year
         )
     
     if month:
         query = query.filter(
-            db.extract('month', models.UtilityReading.reading_date) == month
+            db.extract('month', models.UtilityReading.readingDate) == month
         )
     
-    return query.order_by(models.UtilityReading.reading_date.desc()).all()
+    return query.order_by(models.UtilityReading.readingDate.desc()).all()
 
 def get_apartment_maintenance(
     db: Session, 
-    apartment_id: int, 
+    apartmentId: int, 
     type: Optional[str] = None,
-    from_date: Optional[datetime] = None,
-    to_date: Optional[datetime] = None
+    fromDate: Optional[datetime] = None,
+    toDate: Optional[datetime] = None
 ):
     """Get maintenance records for an apartment with optional filters."""
     query = db.query(models.MaintenanceRecord).filter(
-        models.MaintenanceRecord.apartment_id == apartment_id
+        models.MaintenanceRecord.apartmentId == apartmentId
     )
     
     if type:
         query = query.filter(models.MaintenanceRecord.type == type)
     
-    if from_date:
-        query = query.filter(models.MaintenanceRecord.date >= from_date)
+    if fromDate:
+        query = query.filter(models.MaintenanceRecord.date >= fromDate)
     
-    if to_date:
-        query = query.filter(models.MaintenanceRecord.date <= to_date)
+    if toDate:
+        query = query.filter(models.MaintenanceRecord.date <= toDate)
     
     return query.order_by(models.MaintenanceRecord.date.desc()).all()
 
 def get_apartment_leases(
     db: Session, 
-    apartment_id: int, 
-    is_active: Optional[bool] = None
+    apartmentId: int, 
+    isActive: Optional[bool] = None
 ):
     """Get leases for an apartment with optional active filter."""
     query = db.query(models.Lease).filter(
-        models.Lease.apartment_id == apartment_id
+        models.Lease.apartmentId == apartmentId
     )
     
-    if is_active is not None:
-        query = query.filter(models.Lease.is_active == is_active)
+    if isActive is not None:
+        query = query.filter(models.Lease.isActive == isActive)
     
-    return query.order_by(models.Lease.start_date.desc()).all()
+    return query.order_by(models.Lease.startDate.desc()).all()
 
 def get_apartment_invoices(
     db: Session, 
-    apartment_id: int, 
-    is_paid: Optional[bool] = None,
+    apartmentId: int, 
+    isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None
 ):
     """Get invoices for an apartment with optional filters."""
     query = db.query(models.Invoice).filter(
-        models.Invoice.apartment_id == apartment_id
+        models.Invoice.apartmentId == apartmentId
     )
     
-    if is_paid is not None:
-        query = query.filter(models.Invoice.is_paid == is_paid)
+    if isPaid is not None:
+        query = query.filter(models.Invoice.isPaid == isPaid)
     
     if year:
         query = query.filter(models.Invoice.year == year)
@@ -271,7 +271,7 @@ def get_apartment_invoices(
     if month:
         query = query.filter(models.Invoice.month == month)
     
-    return query.order_by(models.Invoice.issue_date.desc()).all()
+    return query.order_by(models.Invoice.issueDate.desc()).all()
 
 
 
@@ -281,18 +281,18 @@ def get_apartment_invoices(
 def get_tenants(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Tenant).offset(skip).limit(limit).all()
 
-def get_tenant(db: Session, tenant_id: int):
-    return db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+def get_tenant(db: Session, tenantId: int):
+    return db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
 
 def create_tenant(db: Session, tenant: schemas.TenantCreate):
     # Convert Pydantic model to dict
     tenant_data = tenant.dict() if hasattr(tenant, "dict") else dict(tenant)
     
     # Handle nested dict for communication_preferences
-    if "communication_preferences" in tenant_data:
+    if "communicationPreferences" in tenant_data:
         # Check if it's a Pydantic model or already a dict
-        if hasattr(tenant_data["communication_preferences"], "dict"):
-            tenant_data["communication_preferences"] = tenant_data["communication_preferences"].dict()
+        if hasattr(tenant_data["communicationPreferences"], "dict"):
+            tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
         # If it's already a dict, leave it as is
     
     db_tenant = models.Tenant(**tenant_data)
@@ -301,43 +301,44 @@ def create_tenant(db: Session, tenant: schemas.TenantCreate):
     db.refresh(db_tenant)
     return db_tenant
 
-def update_tenant(db: Session, tenant_id: int, tenant: schemas.TenantCreate):
-    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+def update_tenant(db: Session, tenantId: int, tenant: schemas.TenantCreate):
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
         # Convert tenant data to dict
         tenant_data = tenant.dict()
         # Handle nested dict for communication_preferences
-        tenant_data["communication_preferences"] = tenant_data["communication_preferences"].dict()
+        if hasattr(tenant_data["communicationPreferences"], "dict"):
+            tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
         
         for key, value in tenant_data.items():
             setattr(db_tenant, key, value)
         
-        db_tenant.updated_at = datetime.utcnow()
+        db_tenant.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
 
-def delete_tenant(db: Session, tenant_id: int):
-    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+def delete_tenant(db: Session, tenantId: int):
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
         db.delete(db_tenant)
         db.commit()
         return True
     return False
 
-def update_tenant_communication_preferences(db: Session, tenant_id: int, preferences: schemas.CommunicationPreferences):
-    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+def update_tenant_communication_preferences(db: Session, tenantId: int, preferences: schemas.CommunicationPreferences):
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
-        db_tenant.communication_preferences = preferences.dict()
-        db_tenant.updated_at = datetime.utcnow()
+        db_tenant.communicationPreferences = preferences.dict()
+        db_tenant.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
 
-async def save_tenant_document(tenant_id: int, file: UploadFile, doc_type: str):
+async def save_tenant_document(tenantId: int, file: UploadFile, doc_type: str):
     """Save a tenant document image and return the URL."""
     # Create directory for tenant documents if it doesn't exist
-    upload_dir = f"static/tenants/{tenant_id}/documents"
+    upload_dir = f"static/tenants/{tenantId}/documents"
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
@@ -349,47 +350,47 @@ async def save_tenant_document(tenant_id: int, file: UploadFile, doc_type: str):
         shutil.copyfileobj(file.file, buffer)
     
     # Return the URL path
-    return f"/tenants/{tenant_id}/documents/{filename}"
+    return f"/tenants/{tenantId}/documents/{filename}"
 
-def update_tenant_document(db: Session, tenant_id: int, doc_url: str, doc_type: str):
+def update_tenant_document(db: Session, tenantId: int, doc_url: str, doc_type: str):
     """Update tenant document URL in the database."""
-    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenant_id).first()
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
         if doc_type == "front":
             db_tenant.documentFrontImage = doc_url
         elif doc_type == "back":
             db_tenant.documentBackImage = doc_url
         
-        db_tenant.updated_at = datetime.utcnow()
+        db_tenant.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
 
-def get_tenant_leases(db: Session, tenant_id: int, is_active: Optional[bool] = None):
+def get_tenant_leases(db: Session, tenantId: int, isActive: Optional[bool] = None):
     """Get leases for a tenant with optional active filter."""
     query = db.query(models.Lease).filter(
-        models.Lease.tenant_id == tenant_id
+        models.Lease.tenantId == tenantId
     )
     
-    if is_active is not None:
-        query = query.filter(models.Lease.is_active == is_active)
+    if isActive is not None:
+        query = query.filter(models.Lease.isActive == isActive)
     
-    return query.order_by(models.Lease.start_date.desc()).all()
+    return query.order_by(models.Lease.startDate.desc()).all()
 
 def get_tenant_invoices(
     db: Session, 
-    tenant_id: int, 
-    is_paid: Optional[bool] = None,
+    tenantId: int, 
+    isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None
 ):
     """Get invoices for a tenant with optional filters."""
     query = db.query(models.Invoice).filter(
-        models.Invoice.tenant_id == tenant_id
+        models.Invoice.tenantId == tenantId
     )
     
-    if is_paid is not None:
-        query = query.filter(models.Invoice.is_paid == is_paid)
+    if isPaid is not None:
+        query = query.filter(models.Invoice.isPaid == isPaid)
     
     if year:
         query = query.filter(models.Invoice.year == year)
@@ -397,27 +398,27 @@ def get_tenant_invoices(
     if month:
         query = query.filter(models.Invoice.month == month)
     
-    return query.order_by(models.Invoice.issue_date.desc()).all()
+    return query.order_by(models.Invoice.issueDate.desc()).all()
 
-def get_tenant_payment_history(db: Session, tenant_id: int):
+def get_tenant_payment_history(db: Session, tenantId: int):
     """Get payment history for a tenant."""
     # This query gets all payment records for invoices associated with this tenant
     return db.query(models.PaymentRecord).join(
         models.Invoice,
-        models.PaymentRecord.invoice_id == models.Invoice.id
+        models.PaymentRecord.invoiceId == models.Invoice.id
     ).filter(
-        models.Invoice.tenant_id == tenant_id
-    ).order_by(models.PaymentRecord.payment_date.desc()).all()
+        models.Invoice.tenantId == tenantId
+    ).order_by(models.PaymentRecord.paymentDate.desc()).all()
 
 def search_tenants(db: Session, query: str):
     """Search tenants by name, email, or document number."""
     search = f"%{query}%"
     return db.query(models.Tenant).filter(
         or_(
-            models.Tenant.first_name.ilike(search),
-            models.Tenant.last_name.ilike(search),
+            models.Tenant.firstName.ilike(search),
+            models.Tenant.lastName.ilike(search),
             models.Tenant.email.ilike(search),
-            models.Tenant.document_number.ilike(search)
+            models.Tenant.documentNumber.ilike(search)
         )
     ).all()
 
@@ -429,27 +430,27 @@ def get_leases(
     db: Session, 
     skip: int = 0, 
     limit: int = 100,
-    is_active: Optional[bool] = None,
-    tenant_id: Optional[int] = None,
-    apartment_id: Optional[int] = None
+    isActive: Optional[bool] = None,
+    tenantId: Optional[int] = None,
+    apartmentId: Optional[int] = None
 ):
     """Get leases with optional filters."""
     query = db.query(models.Lease)
     
-    if is_active is not None:
-        query = query.filter(models.Lease.is_active == is_active)
+    if isActive is not None:
+        query = query.filter(models.Lease.isActive == isActive)
     
-    if tenant_id is not None:
-        query = query.filter(models.Lease.tenant_id == tenant_id)
+    if tenantId is not None:
+        query = query.filter(models.Lease.tenantId == tenantId)
     
-    if apartment_id is not None:
-        query = query.filter(models.Lease.apartment_id == apartment_id)
+    if apartmentId is not None:
+        query = query.filter(models.Lease.apartmentId == apartmentId)
     
     return query.offset(skip).limit(limit).all()
 
-def get_lease(db: Session, lease_id: int):
+def get_lease(db: Session, leaseId: int):
     """Get a specific lease by ID."""
-    return db.query(models.Lease).filter(models.Lease.id == lease_id).first()
+    return db.query(models.Lease).filter(models.Lease.id == leaseId).first()
 
 def create_lease(db: Session, lease: schemas.LeaseCreate):
     """Create a new lease."""
@@ -459,21 +460,21 @@ def create_lease(db: Session, lease: schemas.LeaseCreate):
     db.refresh(db_lease)
     return db_lease
 
-def update_lease(db: Session, lease_id: int, lease: schemas.LeaseCreate):
+def update_lease(db: Session, leaseId: int, lease: schemas.LeaseCreate):
     """Update an existing lease."""
-    db_lease = db.query(models.Lease).filter(models.Lease.id == lease_id).first()
+    db_lease = db.query(models.Lease).filter(models.Lease.id == leaseId).first()
     if db_lease:
         for key, value in lease.dict().items():
             setattr(db_lease, key, value)
         
-        db_lease.updated_at = datetime.utcnow()
+        db_lease.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_lease)
     return db_lease
 
-def delete_lease(db: Session, lease_id: int):
+def delete_lease(db: Session, leaseId: int):
     """Delete a lease."""
-    db_lease = db.query(models.Lease).filter(models.Lease.id == lease_id).first()
+    db_lease = db.query(models.Lease).filter(models.Lease.id == leaseId).first()
     if db_lease:
         db.delete(db_lease)
         db.commit()
@@ -486,15 +487,15 @@ def get_expiring_leases(db: Session, days_threshold: int = 30):
     expiry_date = today + timedelta(days=days_threshold)
     
     return db.query(models.Lease).filter(
-        models.Lease.is_active == True,
-        models.Lease.end_date <= expiry_date,
-        models.Lease.end_date >= today
-    ).order_by(models.Lease.end_date).all()
+        models.Lease.isActive == True,
+        models.Lease.endDate <= expiry_date,
+        models.Lease.endDate >= today
+    ).order_by(models.Lease.endDate).all()
 
-async def save_lease_document(lease_id: int, file: UploadFile):
+async def save_lease_document(leaseId: int, file: UploadFile):
     """Save a lease document file and return the URL."""
     # Create directory for lease documents if it doesn't exist
-    upload_dir = f"static/leases/{lease_id}/documents"
+    upload_dir = f"static/leases/{leaseId}/documents"
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
@@ -506,7 +507,7 @@ async def save_lease_document(lease_id: int, file: UploadFile):
         shutil.copyfileobj(file.file, buffer)
     
     # Return the URL path
-    return f"/leases/{lease_id}/documents/{filename}"
+    return f"/leases/{leaseId}/documents/{filename}"
 
 def create_lease_document(db: Session, document: schemas.LeaseDocumentCreate):
     """Create a new lease document record."""
@@ -520,9 +521,9 @@ def get_lease_document(db: Session, document_id: int):
     """Get a specific lease document by ID."""
     return db.query(models.LeaseDocument).filter(models.LeaseDocument.id == document_id).first()
 
-def get_lease_documents(db: Session, lease_id: int):
+def get_lease_documents(db: Session, leaseId: int):
     """Get all documents for a specific lease."""
-    return db.query(models.LeaseDocument).filter(models.LeaseDocument.lease_id == lease_id).all()
+    return db.query(models.LeaseDocument).filter(models.LeaseDocument.leaseId == leaseId).all()
 
 def delete_lease_document(db: Session, document_id: int):
     """Delete a lease document."""
@@ -530,7 +531,7 @@ def delete_lease_document(db: Session, document_id: int):
     if db_document:
         # Try to delete the physical file
         try:
-            file_path = f"static/leases/{db_document.lease_id}/documents/{os.path.basename(db_document.url)}"
+            file_path = f"static/leases/{db_document.leaseId}/documents/{os.path.basename(db_document.url)}"
             if os.path.exists(file_path):
                 os.remove(file_path)
         except:
@@ -549,9 +550,9 @@ def create_lease_payment(db: Session, payment: schemas.LeasePaymentCreate):
     db.refresh(db_payment)
     return db_payment
 
-def get_lease_payments(db: Session, lease_id: int):
+def get_lease_payments(db: Session, leaseId: int):
     """Get all payments for a specific lease."""
-    return db.query(models.LeasePayment).filter(models.LeasePayment.lease_id == lease_id).all()
+    return db.query(models.LeasePayment).filter(models.LeasePayment.leaseId == leaseId).all()
 
 def search_leases(db: Session, query: str):
     """Search leases by associated tenant or apartment."""
@@ -559,13 +560,13 @@ def search_leases(db: Session, query: str):
     
     # Search by tenant name or apartment name
     return db.query(models.Lease).join(
-        models.Tenant, models.Lease.tenant_id == models.Tenant.id
+        models.Tenant, models.Lease.tenantId == models.Tenant.id
     ).join(
-        models.Apartment, models.Lease.apartment_id == models.Apartment.id
+        models.Apartment, models.Lease.apartmentId == models.Apartment.id
     ).filter(
         or_(
-            models.Tenant.first_name.ilike(search),
-            models.Tenant.last_name.ilike(search),
+            models.Tenant.firstName.ilike(search),
+            models.Tenant.lastName.ilike(search),
             models.Apartment.name.ilike(search)
         )
     ).all()
@@ -580,42 +581,42 @@ def get_utility_readings(
     db: Session, 
     skip: int = 0, 
     limit: int = 100,
-    apartment_id: Optional[int] = None,
+    apartmentId: Optional[int] = None,
     type: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    is_paid: Optional[bool] = None
+    isPaid: Optional[bool] = None
 ):
     """Get utility readings with optional filters."""
     query = db.query(models.UtilityReading)
     
-    if apartment_id is not None:
-        query = query.filter(models.UtilityReading.apartment_id == apartment_id)
+    if apartmentId is not None:
+        query = query.filter(models.UtilityReading.apartmentId == apartmentId)
     
     if type is not None:
         query = query.filter(models.UtilityReading.type == type)
     
     if year is not None:
-        query = query.filter(db.extract('year', models.UtilityReading.reading_date) == year)
+        query = query.filter(db.extract('year', models.UtilityReading.readingDate) == year)
     
     if month is not None:
-        query = query.filter(db.extract('month', models.UtilityReading.reading_date) == month)
+        query = query.filter(db.extract('month', models.UtilityReading.readingDate) == month)
     
-    if is_paid is not None:
-        query = query.filter(models.UtilityReading.is_paid == is_paid)
+    if isPaid is not None:
+        query = query.filter(models.UtilityReading.isPaid == isPaid)
     
-    return query.order_by(models.UtilityReading.reading_date.desc()).offset(skip).limit(limit).all()
+    return query.order_by(models.UtilityReading.readingDate.desc()).offset(skip).limit(limit).all()
 
 def get_utility_reading(db: Session, reading_id: int):
     """Get a specific utility reading by ID."""
     return db.query(models.UtilityReading).filter(models.UtilityReading.id == reading_id).first()
 
-def get_last_utility_reading(db: Session, apartment_id: int, type: str):
+def get_last_utility_reading(db: Session, apartmentId: int, type: str):
     """Get the last utility reading for a specific apartment and type."""
     return db.query(models.UtilityReading).filter(
-        models.UtilityReading.apartment_id == apartment_id,
+        models.UtilityReading.apartmentId == apartmentId,
         models.UtilityReading.type == type
-    ).order_by(models.UtilityReading.reading_date.desc()).first()
+    ).order_by(models.UtilityReading.readingDate.desc()).first()
 
 def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate):
     """Create a new utility reading."""
@@ -632,7 +633,7 @@ def update_utility_reading(db: Session, reading_id: int, reading: schemas.Utilit
         for key, value in reading.dict().items():
             setattr(db_reading, key, value)
         
-        db_reading.updated_at = datetime.utcnow()
+        db_reading.updatedAt = datetime.utcnow()
         db.commit()
         db.refresh(db_reading)
     return db_reading
@@ -646,49 +647,49 @@ def delete_utility_reading(db: Session, reading_id: int):
         return True
     return False
 
-def get_utility_summary(db: Session, apartment_id: int, year: Optional[int] = None):
+def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = None):
     """Get utility summary for a specific apartment."""
     # Query utilities
     query = db.query(models.UtilityReading).filter(
-        models.UtilityReading.apartment_id == apartment_id
+        models.UtilityReading.apartmentId == apartmentId
     )
     
     if year:
-        query = query.filter(db.extract('year', models.UtilityReading.reading_date) == year)
+        query = query.filter(db.extract('year', models.UtilityReading.readingDate) == year)
     
-    readings = query.order_by(models.UtilityReading.reading_date).all()
+    readings = query.order_by(models.UtilityReading.readingDate).all()
     
     # Group by month and year
     summary_dict = {}
     for reading in readings:
-        reading_month = reading.reading_date.month
-        reading_year = reading.reading_date.year
+        reading_month = reading.readingDate.month
+        reading_year = reading.readingDate.year
         key = f"{reading_year}-{reading_month}"
         
         if key not in summary_dict:
             summary_dict[key] = {
-                "apartment_id": apartment_id,
+                "apartmentId": apartmentId,
                 "month": reading_month,
                 "year": reading_year,
                 "electricity": {"consumption": 0, "cost": 0},
                 "water": {"consumption": 0, "cost": 0},
                 "gas": {"consumption": 0, "cost": 0},
-                "total_cost": 0
+                "totalCost": 0
             }
         
         # Add consumption and cost based on type
         if reading.type == "electricity":
             summary_dict[key]["electricity"]["consumption"] += reading.consumption
-            summary_dict[key]["electricity"]["cost"] += reading.total_cost
+            summary_dict[key]["electricity"]["cost"] += reading.totalCost
         elif reading.type == "water":
             summary_dict[key]["water"]["consumption"] += reading.consumption
-            summary_dict[key]["water"]["cost"] += reading.total_cost
+            summary_dict[key]["water"]["cost"] += reading.totalCost
         elif reading.type == "gas":
             summary_dict[key]["gas"]["consumption"] += reading.consumption
-            summary_dict[key]["gas"]["cost"] += reading.total_cost
+            summary_dict[key]["gas"]["cost"] += reading.totalCost
         
         # Update total cost
-        summary_dict[key]["total_cost"] += reading.total_cost
+        summary_dict[key]["totalCost"] += reading.totalCost
     
     # Convert dictionary to list
     summary_list = list(summary_dict.values())
@@ -702,24 +703,24 @@ def get_yearly_utility_statistics(db: Session, year: int):
     """Get utility statistics for all apartments for a specific year."""
     # Query all readings for the year
     readings = db.query(models.UtilityReading).filter(
-        db.extract('year', models.UtilityReading.reading_date) == year
+        db.extract('year', models.UtilityReading.readingDate) == year
     ).all()
     
     # Group by apartment and month
     stats_dict = {}
     for reading in readings:
-        apartment_id = reading.apartment_id
-        month = reading.reading_date.month
-        key = f"{apartment_id}-{month}"
+        apartmentId = reading.apartmentId
+        month = reading.readingDate.month
+        key = f"{apartmentId}-{month}"
         
         if key not in stats_dict:
-            apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
-            apartment_name = apartment.name if apartment else f"Apartment {apartment_id}"
+            apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+            apartment_name = apartment.name if apartment else f"Apartment {apartmentId}"
             
             stats_dict[key] = {
                 "month": month,
                 "year": year,
-                "apartment_id": apartment_id,
+                "apartmentId": apartmentId,
                 "apartment_name": apartment_name,
                 "electricity": 0,
                 "water": 0,
@@ -738,21 +739,21 @@ def get_yearly_utility_statistics(db: Session, year: int):
     stats_list = list(stats_dict.values())
     
     # Sort by apartment ID and month
-    stats_list.sort(key=lambda x: (x["apartment_id"], x["month"]))
+    stats_list.sort(key=lambda x: (x["apartmentId"], x["month"]))
     
     return stats_list
 
-def get_apartment_consumption(db: Session, apartment_id: int, year: int):
+def get_apartment_consumption(db: Session, apartmentId: int, year: int):
     """Get utility consumption data for a specific apartment and year."""
     # Query all readings for the apartment and year
     readings = db.query(models.UtilityReading).filter(
-        models.UtilityReading.apartment_id == apartment_id,
-        db.extract('year', models.UtilityReading.reading_date) == year
+        models.UtilityReading.apartmentId == apartmentId,
+        db.extract('year', models.UtilityReading.readingDate) == year
     ).all()
     
     # Get the apartment name
-    apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
-    apartment_name = apartment.name if apartment else f"Apartment {apartment_id}"
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+    apartment_name = apartment.name if apartment else f"Apartment {apartmentId}"
     
     # Group by month
     monthly_data = {}
@@ -765,7 +766,7 @@ def get_apartment_consumption(db: Session, apartment_id: int, year: int):
         }
     
     for reading in readings:
-        month = reading.reading_date.month
+        month = reading.readingDate.month
         
         # Add consumption based on type
         if reading.type == "electricity":
@@ -777,7 +778,7 @@ def get_apartment_consumption(db: Session, apartment_id: int, year: int):
     
     # Create the output structure
     result = {
-        "apartment_id": apartment_id,
+        "apartmentId": apartmentId,
         "apartment_name": apartment_name,
         "monthly_data": list(monthly_data.values())
     }

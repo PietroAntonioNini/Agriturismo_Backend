@@ -24,9 +24,9 @@ def get_tenants(
     return service.get_tenants(db, skip=skip, limit=limit)
 
 # GET tenant by ID
-@router.get("/{tenant_id}", response_model=schemas.Tenant)
-def get_tenant(tenant_id: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenant_id=tenant_id)
+@router.get("/{tenantId}", response_model=schemas.Tenant)
+def get_tenant(tenantId: int, db: Session = Depends(get_db)):
+    tenant = service.get_tenant(db, tenantId=tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return tenant
@@ -58,23 +58,12 @@ async def create_tenant_with_images(
             expiry_date_str = tenant_data["documentExpiryDate"]
             if "T" in expiry_date_str:  # If it's in ISO format with time
                 expiry_date_str = expiry_date_str.split("T")[0]  # Extract just the date part
-            tenant_data["document_expiry_date"] = expiry_date_str
+            tenant_data["documentExpiryDate"] = expiry_date_str
         
-        # Handle communication preferences
-        if "communicationPreferences" in tenant_data:
-            tenant_data["communication_preferences"] = tenant_data.pop("communicationPreferences")
+        print(f"Tenant data: {tenant_data}")
         
-        # Convert camelCase to snake_case for all fields
-        converted_data = {}
-        for key, value in tenant_data.items():
-            # Convert camelCase to snake_case
-            snake_key = ''.join(['_'+c.lower() if c.isupper() else c for c in key]).lstrip('_')
-            converted_data[snake_key] = value
-        
-        print(f"Converted data: {converted_data}")
-        
-        # Create tenant object with converted data
-        tenant_obj = schemas.TenantCreate(**converted_data)
+        # Create tenant object with data
+        tenant_obj = schemas.TenantCreate(**tenant_data)
         
         # Create the tenant first
         new_tenant = service.create_tenant(db, tenant_obj)
@@ -105,22 +94,22 @@ async def create_tenant_with_images(
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # PUT update tenant
-@router.put("/{tenant_id}", response_model=schemas.Tenant)
+@router.put("/{tenantId}", response_model=schemas.Tenant)
 def update_tenant(
-    tenant_id: int,
+    tenantId: int,
     tenant: schemas.TenantCreate,
     db: Session = Depends(get_db)
 ):
-    existing_tenant = service.get_tenant(db, tenant_id)
+    existing_tenant = service.get_tenant(db, tenantId)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.update_tenant(db, tenant_id, tenant)
+    return service.update_tenant(db, tenantId, tenant)
 
 # PUT update tenant with images
 # PUT update tenant with images
-@router.put("/{tenant_id}/with-images", response_model=schemas.Tenant)
+@router.put("/{tenantId}/with-images", response_model=schemas.Tenant)
 async def update_tenant_with_images(
-    tenant_id: int,
+    tenantId: int,
     tenant: str = Form(...),
     documentFrontImage: UploadFile = File(None),
     documentBackImage: UploadFile = File(None),
@@ -131,7 +120,7 @@ async def update_tenant_with_images(
         print(f"Received tenant data: {tenant}")
         print(f"Received files: front={documentFrontImage and documentFrontImage.filename}, back={documentBackImage and documentBackImage.filename}")
         
-        existing_tenant = service.get_tenant(db, tenant_id)
+        existing_tenant = service.get_tenant(db, tenantId)
         if existing_tenant is None:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -149,16 +138,16 @@ async def update_tenant_with_images(
         tenant_obj = schemas.TenantCreate(**tenant_data)
         
         # Update the tenant data
-        updated_tenant = service.update_tenant(db, tenant_id, tenant_obj)
+        updated_tenant = service.update_tenant(db, tenantId, tenant_obj)
         
         # Handle document images if provided
         if documentFrontImage:
-            doc_url = await service.save_tenant_document(tenant_id, documentFrontImage, "front")
-            updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "front")
+            doc_url = await service.save_tenant_document(tenantId, documentFrontImage, "front")
+            updated_tenant = service.update_tenant_document(db, tenantId, doc_url, "front")
         
         if documentBackImage:
-            doc_url = await service.save_tenant_document(tenant_id, documentBackImage, "back")
-            updated_tenant = service.update_tenant_document(db, tenant_id, doc_url, "back")
+            doc_url = await service.save_tenant_document(tenantId, documentBackImage, "back")
+            updated_tenant = service.update_tenant_document(db, tenantId, doc_url, "back")
         
         return updated_tenant
         
@@ -169,85 +158,85 @@ async def update_tenant_with_images(
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # DELETE tenant
-@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tenant(tenant_id: int, db: Session = Depends(get_db)):
-    existing_tenant = service.get_tenant(db, tenant_id)
+@router.delete("/{tenantId}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tenant(tenantId: int, db: Session = Depends(get_db)):
+    existing_tenant = service.get_tenant(db, tenantId)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    service.delete_tenant(db, tenant_id)
+    service.delete_tenant(db, tenantId)
     return {"detail": "Tenant deleted successfully"}
 
 # PATCH update tenant communication preferences
-@router.patch("/{tenant_id}/communication-preferences", response_model=schemas.Tenant)
+@router.patch("/{tenantId}/communication-preferences", response_model=schemas.Tenant)
 def update_communication_preferences(
-    tenant_id: int,
+    tenantId: int,
     preferences: schemas.CommunicationPreferences,
     db: Session = Depends(get_db)
 ):
-    existing_tenant = service.get_tenant(db, tenant_id)
+    existing_tenant = service.get_tenant(db, tenantId)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.update_tenant_communication_preferences(db, tenant_id, preferences)
+    return service.update_tenant_communication_preferences(db, tenantId, preferences)
 
 # GET tenant's leases
-@router.get("/{tenant_id}/leases", response_model=List[schemas.Lease])
+@router.get("/{tenantId}/leases", response_model=List[schemas.Lease])
 def get_tenant_leases(
-    tenant_id: int,
-    is_active: Optional[bool] = None,
+    tenantId: int,
+    isActive: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    tenant = service.get_tenant(db, tenant_id)
+    tenant = service.get_tenant(db, tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_leases(db, tenant_id, is_active)
+    return service.get_tenant_leases(db, tenantId, isActive)
 
 # GET tenant's active leases
-@router.get("/{tenant_id}/active-leases", response_model=List[schemas.Lease])
-def get_tenant_active_leases(tenant_id: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenant_id)
+@router.get("/{tenantId}/active-leases", response_model=List[schemas.Lease])
+def get_tenant_active_leases(tenantId: int, db: Session = Depends(get_db)):
+    tenant = service.get_tenant(db, tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_leases(db, tenant_id, is_active=True)
+    return service.get_tenant_leases(db, tenantId, isActive=True)
 
 # GET tenant's invoices
-@router.get("/{tenant_id}/invoices", response_model=List[schemas.Invoice])
+@router.get("/{tenantId}/invoices", response_model=List[schemas.Invoice])
 def get_tenant_invoices(
-    tenant_id: int,
-    is_paid: Optional[bool] = None,
+    tenantId: int,
+    isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    tenant = service.get_tenant(db, tenant_id)
+    tenant = service.get_tenant(db, tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_invoices(db, tenant_id, is_paid, year, month)
+    return service.get_tenant_invoices(db, tenantId, isPaid, year, month)
 
 # GET tenant's payment history
-@router.get("/{tenant_id}/payment-history", response_model=List[schemas.PaymentRecord])
-def get_tenant_payment_history(tenant_id: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenant_id)
+@router.get("/{tenantId}/payment-history", response_model=List[schemas.PaymentRecord])
+def get_tenant_payment_history(tenantId: int, db: Session = Depends(get_db)):
+    tenant = service.get_tenant(db, tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_payment_history(db, tenant_id)
+    return service.get_tenant_payment_history(db, tenantId)
 
 # POST upload tenant document
-@router.post("/{tenant_id}/documents/{doc_type}", response_model=dict)
+@router.post("/{tenantId}/documents/{doc_type}", response_model=dict)
 async def upload_tenant_document(
-    tenant_id: int,
+    tenantId: int,
     doc_type: str,
     image: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    tenant = service.get_tenant(db, tenant_id)
+    tenant = service.get_tenant(db, tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     if doc_type not in ["front", "back"]:
         raise HTTPException(status_code=400, detail="Document type must be 'front' or 'back'")
     
-    doc_url = await service.save_tenant_document(tenant_id, image, doc_type)
-    tenant = service.update_tenant_document(db, tenant_id, doc_url, doc_type)
+    doc_url = await service.save_tenant_document(tenantId, image, doc_type)
+    tenant = service.update_tenant_document(db, tenantId, doc_url, doc_type)
     
     return {"imageUrl": doc_url}
 
