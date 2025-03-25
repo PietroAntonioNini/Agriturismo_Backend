@@ -63,7 +63,7 @@ def update_apartment(db: Session, apartmentId: int, apartment: schemas.Apartment
     if db_apartment:
         for key, value in apartment.dict().items():
             setattr(db_apartment, key, value)
-        db_apartment.updatedAt = datetime.utcnow()
+        setattr(db_apartment, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
@@ -79,10 +79,10 @@ def delete_apartment(db: Session, apartmentId: int):
 def update_apartment_status(db: Session, apartmentId: int, status: str):
     db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
-        db_apartment.status = status
+        setattr(db_apartment, "status", status)
         # Update is_available based on status
-        db_apartment.isAvailable = status == "available"
-        db_apartment.updatedAt = datetime.utcnow()
+        setattr(db_apartment, "isAvailable", status == "available")
+        setattr(db_apartment, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
@@ -102,7 +102,7 @@ async def save_apartment_image(apartmentId: int, file: UploadFile):
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
-    filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1] if file.filename else '.jpg'}"
     file_path = f"{upload_dir}/{filename}"
     
     # Save file
@@ -115,16 +115,18 @@ async def save_apartment_image(apartmentId: int, file: UploadFile):
 def update_apartment_images(db: Session, apartmentId: int, imageUrls: List[str], append: bool = False):
     """Update apartment images in the database."""
     db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+    
     if db_apartment:
-        if append and db_apartment.images:
+        current_images = db_apartment.images or []    
+        if append:
             # Add new images to existing ones
-            current_images = db_apartment.images or []
-            db_apartment.images = current_images + imageUrls
+            updated_images = current_images + imageUrls
         else:
             # Replace images
-            db_apartment.images = imageUrls
-        
-        db_apartment.updatedAt = datetime.utcnow()
+            updated_images = imageUrls
+
+        setattr(db_apartment, "images", updated_images)
+        setattr(db_apartment, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
@@ -132,13 +134,16 @@ def update_apartment_images(db: Session, apartmentId: int, imageUrls: List[str],
 def add_apartment_image(db: Session, apartmentId: int, imageUrl: str):
     """Add a single image to an apartment."""
     db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+    
     if db_apartment:
-        if db_apartment.images:
-            db_apartment.images.append(imageUrl)
+        current_images = db_apartment.images or []
+        if current_images is None:
+            current_images = [imageUrl]
         else:
-            db_apartment.images = [imageUrl]
-        
-        db_apartment.updatedAt = datetime.utcnow()
+            current_images = [imageUrl]
+
+        setattr(db_apartment, "images", current_images)
+        setattr(db_apartment, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_apartment)
     return db_apartment
@@ -146,11 +151,11 @@ def add_apartment_image(db: Session, apartmentId: int, imageUrl: str):
 def delete_apartment_image(db: Session, apartmentId: int, imageName: str):
     """Delete an image from an apartment."""
     db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
-    if db_apartment and db_apartment.images:
+    if db_apartment is not None and db_apartment.images is not None:
         imageUrl = f"/apartments/{apartmentId}/{imageName}"
         if imageUrl in db_apartment.images:
             db_apartment.images.remove(imageUrl)
-            db_apartment.updatedAt = datetime.utcnow()
+            setattr(db_apartment, "updatedAt", datetime.utcnow())
             db.commit()
             
             # Try to delete the physical file
@@ -202,12 +207,12 @@ def get_apartment_utilities(
     
     if year:
         query = query.filter(
-            db.extract('year', models.UtilityReading.readingDate) == year
+            func.extract('year', models.UtilityReading.readingDate) == year
         )
     
     if month:
         query = query.filter(
-            db.extract('month', models.UtilityReading.readingDate) == month
+            func.extract('month', models.UtilityReading.readingDate) == month
         )
     
     return query.order_by(models.UtilityReading.readingDate.desc()).all()
@@ -313,7 +318,7 @@ def update_tenant(db: Session, tenantId: int, tenant: schemas.TenantCreate):
         for key, value in tenant_data.items():
             setattr(db_tenant, key, value)
         
-        db_tenant.updatedAt = datetime.utcnow()
+        setattr(db_tenant, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
@@ -329,8 +334,8 @@ def delete_tenant(db: Session, tenantId: int):
 def update_tenant_communication_preferences(db: Session, tenantId: int, preferences: schemas.CommunicationPreferences):
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
-        db_tenant.communicationPreferences = preferences.dict()
-        db_tenant.updatedAt = datetime.utcnow()
+        setattr(db_tenant, "communicationPreferences", preferences.dict())
+        setattr(db_tenant, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
@@ -342,7 +347,7 @@ async def save_tenant_document(tenantId: int, file: UploadFile, doc_type: str):
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
-    filename = f"{doc_type}_{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    filename = f"{doc_type}_{uuid.uuid4()}{os.path.splitext(file.filename)[1] if file.filename else '.jpg'}"
     file_path = f"{upload_dir}/{filename}"
     
     # Save file
@@ -357,11 +362,11 @@ def update_tenant_document(db: Session, tenantId: int, doc_url: str, doc_type: s
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
         if doc_type == "front":
-            db_tenant.documentFrontImage = doc_url
+            setattr(db_tenant, "documentFrontImage", doc_url)
         elif doc_type == "back":
-            db_tenant.documentBackImage = doc_url
+            setattr(db_tenant, "documentBackImage", doc_url)
         
-        db_tenant.updatedAt = datetime.utcnow()
+        setattr(db_tenant, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_tenant)
     return db_tenant
@@ -467,7 +472,7 @@ def update_lease(db: Session, leaseId: int, lease: schemas.LeaseCreate):
         for key, value in lease.dict().items():
             setattr(db_lease, key, value)
         
-        db_lease.updatedAt = datetime.utcnow()
+        setattr(db_lease, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_lease)
     return db_lease
@@ -499,7 +504,7 @@ async def save_lease_document(leaseId: int, file: UploadFile):
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
-    filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1] if file.filename else '.jpg'}"
     file_path = f"{upload_dir}/{filename}"
     
     # Save file
@@ -531,7 +536,7 @@ def delete_lease_document(db: Session, document_id: int):
     if db_document:
         # Try to delete the physical file
         try:
-            file_path = f"static/leases/{db_document.leaseId}/documents/{os.path.basename(db_document.url)}"
+            file_path = f"static/leases/{db_document.leaseId}/documents/{os.path.basename(str(db_document.url or ''))}"
             if os.path.exists(file_path):
                 os.remove(file_path)
         except:
@@ -597,10 +602,10 @@ def get_utility_readings(
         query = query.filter(models.UtilityReading.type == type)
     
     if year is not None:
-        query = query.filter(db.extract('year', models.UtilityReading.readingDate) == year)
+        query = query.filter(func.extract('year', models.UtilityReading.readingDate) == year)
     
     if month is not None:
-        query = query.filter(db.extract('month', models.UtilityReading.readingDate) == month)
+        query = query.filter(func.extract('month', models.UtilityReading.readingDate) == month)
     
     if isPaid is not None:
         query = query.filter(models.UtilityReading.isPaid == isPaid)
@@ -633,7 +638,7 @@ def update_utility_reading(db: Session, reading_id: int, reading: schemas.Utilit
         for key, value in reading.dict().items():
             setattr(db_reading, key, value)
         
-        db_reading.updatedAt = datetime.utcnow()
+        setattr(db_reading, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_reading)
     return db_reading
@@ -655,7 +660,7 @@ def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = Non
     )
     
     if year:
-        query = query.filter(db.extract('year', models.UtilityReading.readingDate) == year)
+        query = query.filter(func.extract('year', models.UtilityReading.readingDate) == year)
     
     readings = query.order_by(models.UtilityReading.readingDate).all()
     
@@ -678,13 +683,13 @@ def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = Non
             }
         
         # Add consumption and cost based on type
-        if reading.type == "electricity":
+        if str(reading.type) == "electricity":
             summary_dict[key]["electricity"]["consumption"] += reading.consumption
             summary_dict[key]["electricity"]["cost"] += reading.totalCost
-        elif reading.type == "water":
+        elif str(reading.type) == "water":
             summary_dict[key]["water"]["consumption"] += reading.consumption
             summary_dict[key]["water"]["cost"] += reading.totalCost
-        elif reading.type == "gas":
+        elif str(reading.type) == "gas":
             summary_dict[key]["gas"]["consumption"] += reading.consumption
             summary_dict[key]["gas"]["cost"] += reading.totalCost
         
@@ -703,7 +708,7 @@ def get_yearly_utility_statistics(db: Session, year: int):
     """Get utility statistics for all apartments for a specific year."""
     # Query all readings for the year
     readings = db.query(models.UtilityReading).filter(
-        db.extract('year', models.UtilityReading.readingDate) == year
+        func.extract('year', models.UtilityReading.readingDate) == year
     ).all()
     
     # Group by apartment and month
@@ -728,11 +733,11 @@ def get_yearly_utility_statistics(db: Session, year: int):
             }
         
         # Add consumption based on type
-        if reading.type == "electricity":
+        if str(reading.type) == "electricity":
             stats_dict[key]["electricity"] += reading.consumption
-        elif reading.type == "water":
+        elif str(reading.type) == "water":
             stats_dict[key]["water"] += reading.consumption
-        elif reading.type == "gas":
+        elif str(reading.type) == "gas":
             stats_dict[key]["gas"] += reading.consumption
     
     # Convert dictionary to list
@@ -748,7 +753,7 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
     # Query all readings for the apartment and year
     readings = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId,
-        db.extract('year', models.UtilityReading.readingDate) == year
+        func.extract('year', models.UtilityReading.readingDate) == year
     ).all()
     
     # Get the apartment name
@@ -769,11 +774,11 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
         month = reading.readingDate.month
         
         # Add consumption based on type
-        if reading.type == "electricity":
+        if str(reading.type) == "electricity":
             monthly_data[month]["electricity"] += reading.consumption
-        elif reading.type == "water":
+        elif str(reading.type) == "water":
             monthly_data[month]["water"] += reading.consumption
-        elif reading.type == "gas":
+        elif str(reading.type) == "gas":
             monthly_data[month]["gas"] += reading.consumption
     
     # Create the output structure
