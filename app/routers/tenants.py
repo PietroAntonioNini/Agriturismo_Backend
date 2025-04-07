@@ -1,5 +1,6 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Query, status, Body
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
@@ -281,3 +282,38 @@ def search_tenants(
     db: Session = Depends(get_db)
 ):
     return service.search_tenants(db, q)
+
+# DELETE tenant document
+@router.delete("/{tenantId}/documents/{doc_type}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tenant_document(
+    tenantId: int,
+    doc_type: str,
+    db: Session = Depends(get_db)
+):
+    tenant = service.get_tenant(db, tenantId)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    if doc_type not in ["front", "back"]:
+        raise HTTPException(status_code=400, detail="Document type must be 'front' or 'back'")
+    
+    # Ottieni il percorso del file
+    file_path = None
+    if doc_type == "front" and tenant.documentFrontImage:
+        file_path = f"static{tenant.documentFrontImage}"
+        # Aggiorna il tenant nel database
+        tenant = service.update_tenant_document(db, tenantId, "", "front")
+    elif doc_type == "back" and tenant.documentBackImage:
+        file_path = f"static{tenant.documentBackImage}"
+        # Aggiorna il tenant nel database
+        tenant = service.update_tenant_document(db, tenantId, "", "back")
+    
+    # Elimina il file se esiste
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            print(f"Error deleting file {file_path}: {str(e)}")
+            # Continuiamo comunque perché il DB è stato aggiornato
+    
+    return {"detail": "Document deleted successfully"}
