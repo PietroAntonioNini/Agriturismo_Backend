@@ -114,7 +114,27 @@ def delete_apartment(apartmentId: int, db: Session = Depends(get_db)):
     existing_apartment = service.get_apartment(db, apartmentId)
     if existing_apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    # First, delete the apartment from the database
     service.delete_apartment(db, apartmentId)
+    
+    # Then, delete the associated image folder
+    try:
+        # Construct the path to the apartment's image folder
+        folder_path = os.path.join("static", "apartments", str(apartmentId))
+        
+        # Check if the folder exists
+        if os.path.exists(folder_path) and os.path.isdir(folder_path):
+            # Delete the folder and all its contents
+            shutil.rmtree(folder_path)
+            print(f"Successfully deleted image folder for apartment {apartmentId}")
+        else:
+            print(f"No image folder found for apartment {apartmentId}")
+            
+    except Exception as e:
+        # Log the error but don't fail the request
+        print(f"Error deleting image folder for apartment {apartmentId}: {str(e)}")
+        
     return {"detail": "Apartment deleted successfully"}
 
 # PATCH update apartment status
