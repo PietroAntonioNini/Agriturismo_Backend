@@ -69,7 +69,6 @@ class ApartmentBase(CamelCaseModel):
     isFurnished: bool = False
     monthlyRent: float
     status: str
-    isAvailable: Optional[bool] = True
     notes: Optional[str] = None
     utilityMetersInfo: Optional[Dict[str, str]] = None
     amenities: Optional[List[str]] = None

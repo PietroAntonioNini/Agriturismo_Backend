@@ -58,7 +58,6 @@ class Apartment(Base):
     isFurnished = Column(Boolean, default=False)
     monthlyRent = Column(Float)
     status = Column(String, default="available")
-    isAvailable = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     utilityMetersInfo = Column(JSON, nullable=True)
     amenities = Column(JSON, nullable=True)  # Array di stringhe

@@ -18,7 +18,6 @@ def get_apartments(
     db: Session, 
     skip: int = 0, 
     limit: int = 100, 
-    isAvailable: Optional[bool] = None,
     status: Optional[str] = None,
     floor: Optional[int] = None,
     minRooms: Optional[int] = None,
@@ -29,8 +28,7 @@ def get_apartments(
 ):
     query = db.query(models.Apartment)
     
-    if isAvailable is not None:
-        query = query.filter(models.Apartment.isAvailable == isAvailable)
+    # Filter directly by status
     if status:
         query = query.filter(models.Apartment.status == status)
     if floor is not None:
@@ -77,11 +75,10 @@ def delete_apartment(db: Session, apartmentId: int):
     return False
 
 def update_apartment_status(db: Session, apartmentId: int, status: str):
+    """Update an apartment's status"""
     db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
     if db_apartment:
         setattr(db_apartment, "status", status)
-        # Update is_available based on status
-        setattr(db_apartment, "isAvailable", status == "available")
         setattr(db_apartment, "updatedAt", datetime.utcnow())
         db.commit()
         db.refresh(db_apartment)
@@ -175,6 +172,12 @@ def search_apartments(db: Session, query: str):
             models.Apartment.name.ilike(search),
             models.Apartment.description.ilike(search)
         )
+    ).all()
+
+def get_available_apartments(db: Session):
+    """Get apartments with status 'available'"""
+    return db.query(models.Apartment).filter(
+        models.Apartment.status == "available"
     ).all()
 
 def get_apartment_tenants(db: Session, apartmentId: int):
