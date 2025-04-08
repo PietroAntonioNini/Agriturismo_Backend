@@ -19,9 +19,8 @@ router = APIRouter(
 # GET all apartments with optional filters
 @router.get("/", response_model=List[schemas.Apartment])
 def get_apartments(
-    skip: int = 0, 
-    limit: int = 100, 
-    isAvailable: Optional[bool] = None,
+    skip: int = 0,
+    limit: int = 100,
     status: Optional[str] = None,
     floor: Optional[int] = None,
     minRooms: Optional[int] = None,
@@ -32,7 +31,7 @@ def get_apartments(
     db: Session = Depends(get_db)
 ):
     return service.get_apartments(
-        db, skip, limit, isAvailable, status, floor,
+        db, skip, limit, status, floor,
         minRooms, maxPrice, hasBalcony, hasParking, isFurnished
     )
 
@@ -251,7 +250,7 @@ def delete_apartment_image(
 # GET available apartments
 @router.get("/available/list", response_model=List[schemas.Apartment])
 def get_available_apartments(db: Session = Depends(get_db)):
-    return service.get_apartments(db, isAvailable=True)
+    return service.get_apartments(db, status="available")
 
 # GET search apartments
 @router.get("/search/", response_model=List[schemas.Apartment])

@@ -41,7 +41,7 @@ def create_lease(lease: schemas.LeaseCreate, db: Session = Depends(get_db)):
     apartment = service.get_apartment(db, lease.apartmentId)
     if not apartment:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    if not apartment.isAvailable:
+    if apartment.status != "available":
         raise HTTPException(status_code=400, detail="Apartment is not available")
     
     # Verifica che l'inquilino esista
@@ -73,7 +73,7 @@ def update_lease(
         new_apartment = service.get_apartment(db, lease.apartmentId)
         if not new_apartment:
             raise HTTPException(status_code=404, detail="New apartment not found")
-        if not new_apartment.isAvailable:
+        if new_apartment.status != "available":
             raise HTTPException(status_code=400, detail="New apartment is not available")
         
         # Aggiorna lo stato del vecchio appartamento a "available"
