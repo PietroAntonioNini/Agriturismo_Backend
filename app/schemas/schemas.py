@@ -8,8 +8,14 @@ class CamelCaseModel(BaseModel):
         populate_by_name = True
         alias_generator = lambda s: ''.join(word.capitalize() if i else word for i, word in enumerate(s.split('_')))
         from_attributes = True
+        validate_assignment = True
+        arbitrary_types_allowed = True
         # orm_mode è deprecato, ma mantenuto per retrocompatibilità
         orm_mode = True
+        
+        @classmethod
+        def get_properties(cls):
+            return [prop for prop in dir(cls) if isinstance(getattr(cls, prop), property)]
 
 # ------------------ SCHEMA UTILITY READING ------------------
 class UtilityReadingBase(CamelCaseModel):
@@ -274,6 +280,12 @@ class UserPasswordChange(CamelCaseModel):
 class Token(CamelCaseModel):
     accessToken: str
     tokenType: str
+
+class TokenPair(CamelCaseModel):
+    accessToken: str
+    refreshToken: str
+    tokenType: str
+    expiresIn: int
 
 class TokenData(CamelCaseModel):
     username: Optional[str] = None

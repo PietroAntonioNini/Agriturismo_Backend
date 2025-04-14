@@ -57,6 +57,35 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship con RefreshToken
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    
+    def __str__(self):
+        return f"User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, active={self.is_active})"
+    
+    def __repr__(self):
+        return self.__str__()
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
+    username = Column(String, ForeignKey("users.username"))
+    expires = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_revoked = Column(Boolean, default=False)
+    revoked_at = Column(DateTime, nullable=True)
+    
+    # Relationship con User
+    user = relationship("User", back_populates="refresh_tokens")
+    
+    def __str__(self):
+        return f"RefreshToken(id={self.id}, username={self.username}, expires={self.expires}, revoked={self.is_revoked})"
+    
+    def __repr__(self):
+        return self.__str__()
 
 class Apartment(Base):
     __tablename__ = "apartments"
