@@ -57,9 +57,9 @@ async def login_for_access_token(
             )
         
         logger.info(f"Utente trovato: {user.username}, verifico password")
-        logger.info(f"Password hash nel DB: {user.hashed_password[:10]}...")
+        logger.info(f"Password hash nel DB: {user.hashedPassword[:10]}...")
         
-        password_correct = Hasher.verify_password(form_data.password, user.hashed_password)
+        password_correct = Hasher.verify_password(form_data.password, user.hashedPassword)
         logger.info(f"Verifica password: {'corretta' if password_correct else 'errata'}")
         
         if not password_correct:
@@ -159,11 +159,11 @@ async def register_user(
             db_user = UserModel(
                 username=user_in.username,
                 email=user_in.email,
-                hashed_password=hashed_password,
-                first_name=user_in.firstName,
-                last_name=user_in.lastName,
+                hashedPassword=hashed_password,
+                firstName=user_in.firstName,
+                lastName=user_in.lastName,
                 role=user_in.role,
-                is_active=user_in.isActive
+                isActive=user_in.isActive
             )
             
             logger.info("Aggiunta dell'utente al database...")
@@ -175,19 +175,8 @@ async def register_user(
             
             logger.info(f"Utente registrato con successo: {db_user.username}, id: {db_user.id}")
             
-            # Crea una risposta manuale invece di affidarsi alla serializzazione automatica
-            return {
-                "id": db_user.id,
-                "username": db_user.username,
-                "email": db_user.email,
-                "firstName": db_user.first_name,
-                "lastName": db_user.last_name,
-                "role": db_user.role,
-                "isActive": db_user.is_active,
-                "lastLogin": db_user.last_login,
-                "createdAt": db_user.created_at,
-                "updatedAt": db_user.updated_at
-            }
+            # Restituisci direttamente l'oggetto SQLAlchemy. FastAPI/Pydantic gestiranno la serializzazione.
+            return db_user
         except Exception as db_error:
             logger.error(f"Errore durante il salvataggio dell'utente: {str(db_error)}")
             db.rollback()
@@ -233,7 +222,7 @@ async def refresh_access_token(
         
         # Get user
         user = db.query(UserModel).filter(UserModel.username == username).first()
-        if not user or not user.is_active:
+        if not user or not user.isActive:
             logger.warning(f"Utente non trovato o non attivo: {username}")
             # Revoke the token since user is not active or does not exist
             revoke_refresh_token(refresh_token, db)
@@ -319,9 +308,9 @@ async def verify_token_validity(
             "username": current_user.username,
             "email": current_user.email,
             "role": current_user.role,
-            "firstName": current_user.first_name,
-            "lastName": current_user.last_name,
-            "isActive": current_user.is_active
+            "firstName": current_user.firstName,
+            "lastName": current_user.lastName,
+            "isActive": current_user.isActive
         }
     except Exception as e:
         logger.error(f"Errore durante la verifica del token: {str(e)}")

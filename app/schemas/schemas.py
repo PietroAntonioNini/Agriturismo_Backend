@@ -250,23 +250,23 @@ class Invoice(InvoiceBase):
 class UserBase(CamelCaseModel):
     username: str
     email: EmailStr
-    firstName: str
-    lastName: str
+    firstName: str = Field(alias='first_name')
+    lastName: str = Field(alias='last_name')
     role: str
-    isActive: bool = True
+    isActive: bool = Field(alias='is_active', default=True)
 
 class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
     id: int
-    lastLogin: Optional[datetime] = None
-    createdAt: datetime
-    updatedAt: datetime
+    lastLogin: Optional[datetime] = Field(alias='last_login', default=None)
+    createdAt: datetime = Field(alias='created_at')
+    updatedAt: datetime = Field(alias='updated_at')
 
     class Config:
         from_attributes = True
-        orm_mode = True
+        populate_by_name = True
 
 class UserLogin(CamelCaseModel):
     username: str

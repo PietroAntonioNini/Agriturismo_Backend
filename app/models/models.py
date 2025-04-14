@@ -49,20 +49,20 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    first_name = Column(String)
-    last_name = Column(String)
+    hashedPassword = Column(String)
+    firstName = Column(String)
+    lastName = Column(String)
     role = Column(String)
-    is_active = Column(Boolean, default=True)
-    last_login = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    isActive = Column(Boolean, default=True)
+    lastLogin = Column(DateTime, nullable=True)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship con RefreshToken
-    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    refreshTokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     
     def __str__(self):
-        return f"User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, active={self.is_active})"
+        return f"User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, active={self.isActive})"
     
     def __repr__(self):
         return self.__str__()
@@ -79,7 +79,7 @@ class RefreshToken(Base):
     revoked_at = Column(DateTime, nullable=True)
     
     # Relationship con User
-    user = relationship("User", back_populates="refresh_tokens")
+    user = relationship("User", back_populates="refreshTokens")
     
     def __str__(self):
         return f"RefreshToken(id={self.id}, username={self.username}, expires={self.expires}, revoked={self.is_revoked})"

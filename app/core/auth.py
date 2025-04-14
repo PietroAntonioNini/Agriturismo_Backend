@@ -9,7 +9,7 @@ import logging
 import uuid
 
 from app.config import settings
-from app.models.models import User, RefreshToken
+from app.models.models import User as UserModel, RefreshToken
 from app.schemas.schemas import TokenData
 from app.database import get_db
 
@@ -181,7 +181,7 @@ async def get_current_user(
         token_data = verify_token(token, credentials_exception)
         logger.info(f"Token verificato per username: {token_data.username}")
         
-        user = db.query(User).filter(User.username == token_data.username).first()
+        user = db.query(UserModel).filter(UserModel.username == token_data.username).first()
         if user is None:
             logger.warning(f"Utente {token_data.username} non trovato nel database")
             raise HTTPException(
@@ -206,10 +206,10 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
+async def get_current_active_user(current_user: UserModel = Depends(get_current_user)):
     """
     Check if the current user is active
     """
-    if not current_user.is_active:
+    if not current_user.isActive:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user 
