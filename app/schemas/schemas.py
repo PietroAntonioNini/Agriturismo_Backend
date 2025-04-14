@@ -7,8 +7,9 @@ class CamelCaseModel(BaseModel):
     class Config:
         populate_by_name = True
         alias_generator = lambda s: ''.join(word.capitalize() if i else word for i, word in enumerate(s.split('_')))
-        orm_mode = True
         from_attributes = True
+        # orm_mode è deprecato, ma mantenuto per retrocompatibilità
+        orm_mode = True
 
 # ------------------ SCHEMA UTILITY READING ------------------
 class UtilityReadingBase(CamelCaseModel):
@@ -257,6 +258,27 @@ class User(UserBase):
     createdAt: datetime
     updatedAt: datetime
 
+    class Config:
+        from_attributes = True
+        orm_mode = True
+
+class UserLogin(CamelCaseModel):
+    username: str
+    password: str
+
+class UserPasswordChange(CamelCaseModel):
+    currentPassword: str
+    newPassword: str
+
+# ------------------ SCHEMA TOKEN ------------------
+class Token(CamelCaseModel):
+    accessToken: str
+    tokenType: str
+
+class TokenData(CamelCaseModel):
+    username: Optional[str] = None
+    role: Optional[str] = None
+
 # ------------------ SCHEMA UTILITY SUMMARY ------------------
 class UtilitySummary(CamelCaseModel):
     apartmentId: int
@@ -280,10 +302,3 @@ class ApartmentUtilityData(CamelCaseModel):
     apartmentId: int
     apartmentName: str
     monthlyData: List[dict]
-
-class Token(CamelCaseModel):
-    accessToken: str
-    tokenType: str
-
-class TokenData(CamelCaseModel):
-    username: Optional[str] = None
