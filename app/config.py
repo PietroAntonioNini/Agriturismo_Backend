@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     csrf_secret: str = os.getenv("CSRF_SECRET", secrets.token_hex(32))
     csrf_token_expire_minutes: int = int(os.getenv("CSRF_TOKEN_EXPIRE_MINUTES", "60"))
     enable_ssl_redirect: bool = os.getenv("ENABLE_SSL_REDIRECT", "False").lower() == "true"
+    # Email settings
+    sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
+    sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "no-reply@agriturismo.com")
+    sendgrid_from_name: str = os.getenv("SENDGRID_FROM_NAME", "Agriturismo Support")
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:4200")
+    # Password reset settings
+    password_reset_token_expire_hours: int = int(os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_HOURS", "24"))
+    # Configurazioni per rate limiting specifici per reset password
+    rate_limit_forgot_password: str = os.getenv("RATE_LIMIT_FORGOT_PASSWORD", "3/hour")
 
 settings = Settings()
 

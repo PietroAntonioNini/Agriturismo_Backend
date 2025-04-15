@@ -22,6 +22,11 @@ from app.core.auth import (
 from app.config import settings
 from app.utils.rate_limiter import limiter
 from app.utils.csrf import generate_csrf_token, csrf_protect
+from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, GenericResponse
+from sqlalchemy import or_
+from app.services.token_service import TokenService
+from app.services.email.email_service import EmailService
+from fastapi.responses import JSONResponse
 
 # Configurazione del logging
 logging.basicConfig(level=logging.INFO)
@@ -332,7 +337,7 @@ async def change_password(
     """
     try:
         # Verify current password
-        if not Hasher.verify_password(password_data.currentPassword, current_user.hashed_password):
+        if not Hasher.verify_password(password_data.currentPassword, current_user.hashedPassword):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Incorrect current password",
@@ -342,7 +347,7 @@ async def change_password(
         validate_password(password_data.newPassword)
         
         # Update password
-        current_user.hashed_password = Hasher.get_password_hash(password_data.newPassword)
+        current_user.hashedPassword = Hasher.get_password_hash(password_data.newPassword)
         db.commit()
         
         # Logout from all other devices for security
@@ -421,3 +426,113 @@ def validate_password(password: str) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"message": "Password non valida", "errors": errors}
         )
+
+# Aggiungi la dependency per ottenere il servizio email
+def get_email_service():
+    return EmailService()
+
+# Aggiungi l'endpoint per il forgot password
+@router.post("/forgot-password", response_model=GenericResponse)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    email_service: EmailService = Depends(get_email_service)
+):
+    """
+    Richiede un reset della password.
+    Invia un'email con un token di reset se l'utente esiste.
+    Per sicurezza, non indica se l'utente esiste o meno.
+    """
+    # Verifica se l'utente esiste
+    user = None
+    
+    if request.username:
+        user = db.query(UserModel).filter(UserModel.username == request.username).first()
+    
+    if not user and request.email:
+        user = db.query(UserModel).filter(UserModel.email == request.email).first()
+    
+    # Se l'utente è stato trovato
+    if user:
+        # Se è stato fornito un email che non corrisponde, non procediamo
+        if request.email and user.email != request.email:
+            # Per sicurezza, non rivelare che l'email non corrisponde
+            return {"message": "Se l'utente esiste, un'email di reset password è stata inviata."}
+        
+        # Genera il token di reset
+        token_service = TokenService()
+        reset_token = token_service.create_password_reset_token(db, user)
+        
+        # Invia l'email
+        email_sent = email_service.send_password_reset_email(user, reset_token)
+        
+        if not email_sent:
+            # Log dell'errore, ma non rivelare problemi al client
+            logger.error(f"Impossibile inviare email di reset password a {user.email}")
+    
+    # Sempre lo stesso messaggio, che l'utente esista o meno
+    return {"message": "Se l'utente esiste, un'email di reset password è stata inviata."}
+
+# Aggiungi l'endpoint per il reset password
+@router.post("/reset-password", response_model=GenericResponse)
+async def reset_password(
+    request: ResetPasswordRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    email_service: EmailService = Depends(get_email_service)
+):
+    """
+    Resetta la password usando il token inviato via email.
+    Verifica il token, aggiorna la password e revoca tutti i token di autenticazione.
+    """
+    # Verifica il token
+    token_service = TokenService()
+    token = token_service.validate_reset_token(db, request.token)
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token non valido o scaduto."
+        )
+    
+    # Ottieni l'utente
+    user = db.query(UserModel).filter(UserModel.id == token.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utente non trovato."
+        )
+    
+    # Verifica la nuova password
+    from app.utils.security import is_password_valid, get_password_hash
+    if not is_password_valid(request.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La password non soddisfa i requisiti di sicurezza."
+        )
+    
+    # Aggiorna la password
+    user.hashedPassword = get_password_hash(request.new_password)
+    user.updatedAt = datetime.utcnow()
+    
+    # Invalida il token di reset
+    token_service.invalidate_token(db, token)
+    
+    # Revoca tutti i refresh token per sicurezza
+    revoke_all_user_tokens(user.username, db)
+    
+    db.commit()
+    
+    # Invia notifica di sicurezza per avvisare l'utente
+    client_host = req.client.host if req else "Unknown"
+    user_agent = req.headers.get("User-Agent", "Unknown") if req else "Unknown"
+    
+    email_service.send_security_notification_email(
+        user, 
+        "Reset Password Completato", 
+        client_host,
+        user_agent
+    )
+    
+    return {"message": "Password aggiornata con successo."}

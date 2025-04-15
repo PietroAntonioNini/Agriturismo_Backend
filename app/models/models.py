@@ -61,6 +61,9 @@ class User(Base):
     # Relationship con RefreshToken
     refreshTokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     
+    # Relationship con PasswordResetToken
+    reset_tokens = relationship("PasswordResetToken", back_populates="user")
+    
     def __str__(self):
         return f"User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, active={self.isActive})"
     
@@ -310,3 +313,17 @@ class UtilityReading(Base):
     # Timestamp
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires = Column(DateTime)
+    is_used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
+
+    # Relazioni
+    user = relationship("User", back_populates="reset_tokens")

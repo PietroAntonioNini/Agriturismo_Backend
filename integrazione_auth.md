@@ -64,6 +64,8 @@ refresh_tokens
 | GET | `/api/auth/verify-token` | Verifica validità token | - | Informazioni utente |
 | PUT | `/api/auth/change-password` | Cambia password | `currentPassword`, `newPassword` | Messaggio di successo |
 | GET | `/api/auth/csrf-token` | Ottiene token CSRF | - | `csrf_token`, `expires` |
+| POST | `/api/auth/forgot-password` | Richiede reset password | `username`, `email` | Messaggio di successo |
+| POST | `/api/auth/reset-password` | Resetta password con token | `token`, `new_password` | Messaggio di successo |
 
 #### 1.3.2 Utenti
 
@@ -207,17 +209,19 @@ Per integrare l'autenticazione e sicurezza con Angular:
 npm install @auth0/angular-jwt
 ```
 
-2. Configura un modulo per l'autenticazione che:
+2. Configura il sistema di autenticazione che:
    - Gestisca la memorizzazione dei token JWT e refresh token
    - Aggiunga automaticamente il token a tutte le richieste API
    - Intercetti le risposte 401 per il refresh automatico del token
    - Implementi logout locale e remoto
    - Gestisca la protezione CSRF
 
-3. Crea componenti per:
+3. Crea componenti standalone per:
    - Login
    - Registrazione
    - Cambio password
+   - Password dimenticata
+   - Reset password
    - Protezione delle rotte private
    - Gestione errori di autenticazione
 
@@ -225,14 +229,13 @@ npm install @auth0/angular-jwt
 
 #### Login
 ```typescript
-// Formato per il login
-const credentials = {
-  username: 'username',
-  password: 'password'
-};
+// Formato per il login (utilizzando FormData)
+const formData = new FormData();
+formData.append('username', 'username');
+formData.append('password', 'password');
 
 // Richiesta di login
-this.http.post<TokenPair>('/api/auth/login', credentials)
+this.http.post<TokenPair>('/api/auth/login', formData)
   .subscribe(response => {
     // Salva entrambi i token
     localStorage.setItem('access_token', response.accessToken);
@@ -246,7 +249,10 @@ this.http.post<TokenPair>('/api/auth/login', credentials)
 ```typescript
 // Richiesta di refresh token (quando l'access token sta per scadere)
 const refreshToken = localStorage.getItem('refresh_token');
-this.http.post<TokenPair>('/api/auth/refresh-token', { refresh_token: refreshToken })
+const formData = new FormData();
+formData.append('refresh_token', refreshToken);
+
+this.http.post<TokenPair>('/api/auth/refresh-token', formData)
   .subscribe(response => {
     localStorage.setItem('access_token', response.accessToken);
     localStorage.setItem('refresh_token', response.refreshToken);
@@ -259,54 +265,110 @@ this.http.post<TokenPair>('/api/auth/refresh-token', { refresh_token: refreshTok
 // Richiesta di logout (singolo dispositivo)
 const refreshToken = localStorage.getItem('refresh_token');
 this.http.post('/api/auth/logout', { refresh_token: refreshToken })
-  .subscribe(response => {
-    // Rimuovi token memorizzati localmente
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('expires_at');
-    localStorage.removeItem('csrf_token'); // Rimuovi anche il token CSRF
-    // Reindirizzamento al login
-  });
-
-// Logout da tutti i dispositivi
-this.http.post('/api/auth/logout-all', {})
-  .subscribe(response => {
-    // Rimuovi token memorizzati localmente
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('expires_at');
-    localStorage.removeItem('csrf_token'); // Rimuovi anche il token CSRF
-    // Reindirizzamento al login
+  .subscribe({
+    next: _ => {
+      console.log('Logout riuscito');
+      // Rimuovi token memorizzati localmente
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('expires_at');
+      localStorage.removeItem('csrf_token'); // Rimuovi anche il token CSRF
+      // Reindirizzamento al login
+    },
+    error: error => {
+      console.error('Errore durante il logout:', error);
+      // Anche se il logout remoto fallisce, esegui comunque il logout locale
+      // Rimuovi token memorizzati localmente
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('expires_at');
+      localStorage.removeItem('csrf_token');
+      // Reindirizzamento al login
+    }
   });
 ```
 
 #### Cambio Password
 ```typescript
-// Formato per il cambio password
-const passwordData = {
-  currentPassword: 'current-password',
-  newPassword: 'new-password'
-};
+// Formato per il cambio password (utilizzando FormData)
+const formData = new FormData();
+formData.append('currentPassword', 'current-password');
+formData.append('newPassword', 'new-password');
 
-// Richiesta di cambio password (con token CSRF)
-this.http.put('/api/auth/change-password', passwordData, {
-  headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') }
-})
+// Richiesta di cambio password
+this.http.put('/api/auth/change-password', formData)
   .subscribe(response => {
     // Gestione risposta
+  });
+```
+
+#### Password Dimenticata
+```typescript
+// Formato per il recupero password (utilizzando FormData)
+const formData = new FormData();
+formData.append('username', username);
+formData.append('email', email);
+
+// Richiesta di recupero password
+this.http.post('/api/auth/forgot-password', formData)
+  .subscribe({
+    next: () => {
+      // Mostra messaggio di successo
+    },
+    error: error => {
+      // Gestione errore
+    }
+  });
+```
+
+#### Reset Password
+```typescript
+// Formato per il reset password (utilizzando FormData)
+const formData = new FormData();
+formData.append('token', token); // Token ricevuto via email
+formData.append('new_password', newPassword);
+
+// Richiesta di reset password
+this.http.post('/api/auth/reset-password', formData)
+  .subscribe({
+    next: () => {
+      // Reindirizza al login con messaggio di successo
+    },
+    error: error => {
+      // Gestione errore
+    }
   });
 ```
 
 #### Verifica validità token
 ```typescript
 // Verifica se il token è valido e ottieni informazioni utente
-this.http.get('/api/auth/verify-token')
-  .subscribe(user => {
-    // Il token è valido, salva le informazioni utente
-    this.currentUser = user;
-  }, error => {
-    // Token non valido, reindirizza al login
-    this.router.navigate(['/login']);
+const headers = new HttpHeaders({
+  'Authorization': `Bearer ${this.getToken()}`
+});
+
+// Prima prova /auth/verify-token
+this.http.get<User>('/api/auth/verify-token', { headers })
+  .subscribe({
+    next: user => {
+      // Il token è valido, salva le informazioni utente
+      this.currentUserSubject.next(user);
+    },
+    error: error => {
+      // Prova con /users/me come fallback
+      this.http.get<User>('/api/users/me', { headers })
+        .subscribe({
+          next: user => {
+            this.currentUserSubject.next(user);
+          },
+          error: secondError => {
+            // Token non valido, reindirizza al login o refresh token
+            if (secondError.status === 401) {
+              this.refreshToken().subscribe();
+            }
+          }
+        });
+    }
   });
 ```
 
@@ -316,22 +378,30 @@ this.http.get('/api/auth/verify-token')
 ```typescript
 // Richiesta per ottenere il token CSRF
 this.http.get<{csrf_token: string, expires: string}>('/api/auth/csrf-token')
-  .subscribe(response => {
-    // Salva il token CSRF (il cookie viene impostato automaticamente dal backend)
-    localStorage.setItem('csrf_token', response.csrf_token);
-  });
+  .pipe(
+    tap(response => {
+      localStorage.setItem('csrf_token', response.csrf_token);
+    }),
+    catchError(error => {
+      console.error('Error getting CSRF token:', error);
+      return throwError(() => error);
+    })
+  );
 ```
 
 #### Aggiungere il token CSRF alle richieste POST/PUT/DELETE
 ```typescript
-// Esempio di invio dati con protezione CSRF
-const data = { /* i dati da inviare */ };
-this.http.post('/api/endpoint', data, {
-  headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') }
-})
-  .subscribe(response => {
-    // Gestione risposta
-  });
+// Implementato nell'interceptor HTTP
+private addCsrfToken(request: HttpRequest<any>): HttpRequest<any> {
+  const csrfToken = localStorage.getItem('csrf_token');
+  
+  if (csrfToken) {
+    return request.clone({
+      setHeaders: { 'X-CSRF-Token': csrfToken }
+    });
+  }
+  return request;
+}
 ```
 
 ### 2.4 Protezione delle rotte
@@ -345,22 +415,30 @@ Utilizzare il guard di Angular per proteggere le rotte:
 })
 export class AuthGuard implements CanActivate {
   
-  constructor(private authService: AuthService, private router: Router) {}
+  private authService = inject(AuthService);
+  private router = inject(Router);
   
-  canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): boolean {
-    if (!this.authService.isAuthenticated()) {
-      this.router.navigate(['/login']);
-      return false;
+  canActivate(
+    route: ActivatedRouteSnapshot,
+    state: RouterStateSnapshot
+  ): boolean {
+    if (this.authService.isLoggedIn()) {
+      // Verifica ruolo se richiesto
+      const requiredRole = route.data['role'];
+      if (requiredRole && !this.authService.hasRole(requiredRole)) {
+        // Reindirizza se non ha il ruolo richiesto
+        this.router.navigate(['/unauthorized']);
+        return false;
+      }
+      
+      return true;
     }
     
-    // Controllo ruoli se necessario
-    const requiredRole = route.data.role;
-    if (requiredRole && !this.authService.hasRole(requiredRole)) {
-      this.router.navigate(['/unauthorized']);
-      return false;
-    }
-    
-    return true;
+    // Reindirizza alla pagina di login
+    this.router.navigate(['/auth/login'], {
+      queryParams: { returnUrl: state.url }
+    });
+    return false;
   }
 }
 ```
@@ -378,7 +456,7 @@ export class AuthInterceptor implements HttpInterceptor {
 
   constructor(private authService: AuthService) {}
 
-  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+  intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     // Aggiungi JWT token a tutte le richieste (tranne login e refresh)
     if (!request.url.includes('/auth/login') && !request.url.includes('/auth/refresh-token')) {
       request = this.addAuthToken(request);
@@ -400,7 +478,7 @@ export class AuthInterceptor implements HttpInterceptor {
             return this.handleCsrfError(request, next);
           }
         }
-        return throwError(error);
+        return throwError(() => error);
       })
     );
   }
@@ -424,67 +502,108 @@ export class AuthInterceptor implements HttpInterceptor {
     }
     return request;
   }
+}
+```
 
-  private addCsrfToken(request: HttpRequest<any>): HttpRequest<any> {
-    const csrfToken = localStorage.getItem('csrf_token');
+### 2.6 Implementazione dei componenti Angular
+
+In Angular 17+ utilizziamo componenti standalone per tutti i componenti di autenticazione. Di seguito un esempio di struttura:
+
+```typescript
+// Esempio di componente standalone per reset-password
+@Component({
+  selector: 'app-reset-password',
+  templateUrl: './reset-password.component.html',
+  styleUrls: ['./reset-password.component.scss'],
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule]
+})
+export class ResetPasswordComponent implements OnInit {
+  resetForm: FormGroup;
+  isLoading = false;
+  submitted = false;
+  errorMessage: string | null = null;
+  successMessage: string | null = null;
+  token: string | null = null;
+
+  constructor(
+    private fb: FormBuilder,
+    private authService: AuthService,
+    private router: Router,
+    private route: ActivatedRoute
+  ) {
+    this.resetForm = this.fb.group({
+      password: ['', [Validators.required, Validators.minLength(8)]],
+      confirmPassword: ['', Validators.required]
+    }, { validators: this.passwordMatchValidator });
+  }
+
+  ngOnInit(): void {
+    // Estrai il token dall'URL se presente
+    this.token = this.route.snapshot.queryParamMap.get('token');
     
-    if (csrfToken) {
-      return request.clone({
-        setHeaders: { 'X-CSRF-Token': csrfToken }
+    if (!this.token) {
+      this.errorMessage = 'Token di reset non valido. Riprovare il processo di recupero password.';
+    }
+  }
+
+  // Validatore per verificare che le password corrispondano
+  passwordMatchValidator(control: AbstractControl): ValidationErrors | null {
+    const password = control.get('password');
+    const confirmPassword = control.get('confirmPassword');
+
+    if (password && confirmPassword && password.value !== confirmPassword.value) {
+      confirmPassword.setErrors({ passwordMismatch: true });
+      return { passwordMismatch: true };
+    }
+
+    return null;
+  }
+
+  onSubmit(): void {
+    this.submitted = true;
+    
+    if (this.resetForm.invalid) {
+      return;
+    }
+
+    this.isLoading = true;
+    this.errorMessage = null;
+    this.successMessage = null;
+
+    // Se non c'è token, avvisa l'utente e blocca la procedura
+    if (!this.token) {
+      this.errorMessage = 'Token di reset non valido. Riprovare il processo di recupero password.';
+      this.isLoading = false;
+      return;
+    }
+
+    const newPassword = this.resetForm.get('password')?.value;
+    
+    this.authService.resetPassword(this.token, newPassword)
+      .subscribe({
+        next: (response) => {
+          this.isLoading = false;
+          this.successMessage = 'Password aggiornata con successo. Sarai reindirizzato alla pagina di login.';
+          
+          // Reindirizza al login dopo 2 secondi
+          setTimeout(() => {
+            this.router.navigate(['/auth/login']);
+          }, 2000);
+        },
+        error: (error) => {
+          this.isLoading = false;
+          this.errorMessage = error?.error?.message || 'Si è verificato un errore durante il reset della password. Riprova più tardi.';
+          console.error('Reset password error:', error);
+        }
       });
-    }
-    return request;
-  }
-
-  private requiresCsrfToken(method: string): boolean {
-    return ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
-  }
-
-  private handleCsrfError(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    // Richiedi un nuovo token CSRF e riprova la richiesta
-    return this.authService.getCsrfToken().pipe(
-      switchMap(token => {
-        localStorage.setItem('csrf_token', token.csrf_token);
-        return next.handle(this.addCsrfToken(request));
-      })
-    );
-  }
-
-  private handle401Error(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    if (!this.isRefreshing) {
-      this.isRefreshing = true;
-      this.refreshTokenSubject.next(null);
-
-      return this.authService.refreshToken().pipe(
-        switchMap(token => {
-          this.isRefreshing = false;
-          this.refreshTokenSubject.next(token.accessToken);
-          return next.handle(this.addAuthToken(request));
-        }),
-        catchError(error => {
-          this.isRefreshing = false;
-          this.authService.logout();
-          return throwError(error);
-        })
-      );
-    } else {
-      return this.refreshTokenSubject.pipe(
-        filter(token => token != null),
-        take(1),
-        switchMap(jwt => next.handle(this.addAuthToken(request)))
-      );
-    }
-  }
-  
-  private refreshToken() {
-    this.authService.refreshToken().subscribe();
   }
 }
 ```
 
-### 2.6 Servizio di autenticazione completo
+### 2.7 Servizio di autenticazione completo
 
-Implementare un servizio di autenticazione che gestisca JWT, Refresh Token e CSRF:
+Implementare un servizio di autenticazione che gestisca JWT, Refresh Token, CSRF e recovery password:
 
 ```typescript
 // auth.service.ts
@@ -492,18 +611,27 @@ Implementare un servizio di autenticazione che gestisca JWT, Refresh Token e CSR
   providedIn: 'root'
 })
 export class AuthService {
-  private currentUserSubject = new BehaviorSubject<any>(null);
-  public currentUser = this.currentUserSubject.asObservable();
-  
+  private currentUserSubject = new BehaviorSubject<User | null>(null);
+  public currentUser$ = this.currentUserSubject.asObservable();
+  private apiUrl = `${environment.apiUrl}/api`;
+  private refreshTokenInProgress = false;
+  private refreshTokenSubject = new BehaviorSubject<string | null>(null);
+
   constructor(private http: HttpClient, private router: Router) {
     // Verifica il token all'avvio dell'applicazione
     this.checkToken();
-    // Richiedi un token CSRF all'avvio
-    this.getCsrfToken().subscribe();
+    // Richiedi un token CSRF all'avvio se l'utente è autenticato
+    if (this.isLoggedIn()) {
+      this.getCsrfToken().subscribe();
+    }
   }
-  
-  login(username: string, password: string): Observable<any> {
-    return this.http.post<TokenPair>('/api/auth/login', { username, password })
+
+  login(username: string, password: string): Observable<TokenPair> {
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    return this.http.post<TokenPair>(`${this.apiUrl}/auth/login`, formData)
       .pipe(
         map(response => {
           // Salva token
@@ -513,150 +641,88 @@ export class AuthService {
           // Richiedi un nuovo token CSRF dopo il login
           this.getCsrfToken().subscribe();
           return response;
-        })
-      );
-  }
-  
-  register(user: any): Observable<any> {
-    return this.http.post('/api/auth/register', user);
-  }
-  
-  getCsrfToken(): Observable<{csrf_token: string, expires: string}> {
-    return this.http.get<{csrf_token: string, expires: string}>('/api/auth/csrf-token')
-      .pipe(
-        tap(response => {
-          localStorage.setItem('csrf_token', response.csrf_token);
-        })
-      );
-  }
-  
-  refreshToken(): Observable<TokenPair> {
-    const refreshToken = localStorage.getItem('refresh_token');
-    
-    if (!refreshToken) {
-      this.logout();
-      return throwError('No refresh token available');
-    }
-    
-    return this.http.post<TokenPair>('/api/auth/refresh-token', { refresh_token: refreshToken })
-      .pipe(
-        map(response => {
-          this.storeTokens(response);
-          return response;
         }),
         catchError(error => {
-          this.logout();
-          return throwError(error);
+          console.error('Login error:', error);
+          return throwError(() => error);
         })
       );
   }
   
-  logout(): void {
-    const refreshToken = localStorage.getItem('refresh_token');
+  // ... altri metodi ...
+
+  forgotPassword(username: string, email: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('email', email);
     
-    if (refreshToken) {
-      // Tenta di revocare il token sul server (anche se fallisce procediamo con il logout locale)
-      this.http.post('/api/auth/logout', { refresh_token: refreshToken })
-        .subscribe(
-          _ => this.clearLocalStorage(),
-          _ => this.clearLocalStorage()
-        );
-    } else {
-      this.clearLocalStorage();
-    }
-  }
-  
-  logoutAllDevices(): Observable<any> {
-    return this.http.post('/api/auth/logout-all', {})
+    return this.http.post(`${this.apiUrl}/auth/forgot-password`, formData)
       .pipe(
-        finalize(() => this.clearLocalStorage())
+        catchError(error => {
+          console.error('Errore nel recupero password:', error);
+          return throwError(() => error);
+        })
       );
   }
-  
-  changePassword(currentPassword: string, newPassword: string): Observable<any> {
-    return this.http.put('/api/auth/change-password', {
-      currentPassword,
-      newPassword
-    });
-  }
-  
-  isAuthenticated(): boolean {
-    const token = localStorage.getItem('access_token');
-    const expiresAt = Number(localStorage.getItem('expires_at'));
+
+  resetPassword(token: string, newPassword: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('token', token);
+    formData.append('new_password', newPassword);
     
-    if (!token || !expiresAt) {
-      return false;
-    }
-    
-    return new Date().getTime() < expiresAt;
-  }
-  
-  hasRole(role: string): boolean {
-    const user = this.currentUserSubject.value;
-    return user && user.role === role;
-  }
-  
-  private storeTokens(response: TokenPair): void {
-    localStorage.setItem('access_token', response.accessToken);
-    localStorage.setItem('refresh_token', response.refreshToken);
-    localStorage.setItem('expires_at', String(new Date().getTime() + response.expiresIn * 1000));
-  }
-  
-  private loadUserProfile(): void {
-    this.http.get('/api/auth/verify-token')
-      .subscribe(
-        user => this.currentUserSubject.next(user),
-        error => {
-          console.error('Failed to load user profile', error);
-          // Se non riusciamo a caricare il profilo, il token potrebbe essere invalido
-          this.refreshToken().subscribe();
-        }
+    return this.http.post(`${this.apiUrl}/auth/reset-password`, formData)
+      .pipe(
+        catchError(error => {
+          console.error('Errore nel reset della password:', error);
+          return throwError(() => error);
+        })
       );
-  }
-  
-  private clearLocalStorage(): void {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('expires_at');
-    localStorage.removeItem('csrf_token');
-    this.currentUserSubject.next(null);
-    this.router.navigate(['/login']);
-  }
-  
-  private checkToken(): void {
-    if (this.isAuthenticated()) {
-      this.loadUserProfile();
-    }
   }
 }
 ```
 
-### 2.7 Configurazione modulo app per il sistema di autenticazione
+### 2.8 Configurazione del routing per i componenti di autenticazione
 
 ```typescript
-// app.module.ts
+// auth.module.ts
+const routes: Routes = [
+  {
+    path: 'login',
+    loadComponent: () => import('../../pages/auth/login/login.component').then(m => m.LoginComponent)
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('../../pages/auth/register/register.component').then(m => m.RegisterComponent)
+  },
+  {
+    path: 'change-password',
+    loadComponent: () => import('../../pages/auth/change-password/change-password.component').then(m => m.ChangePasswordComponent)
+  },
+  {
+    path: 'forgot-password',
+    loadComponent: () => import('../../pages/auth/forgot-password/forgot-password.component').then(m => m.ForgotPasswordComponent)
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () => import('../../pages/auth/reset-password/reset-password.component').then(m => m.ResetPasswordComponent)
+  },
+  {
+    path: '',
+    redirectTo: 'login',
+    pathMatch: 'full'
+  }
+];
+
 @NgModule({
-  declarations: [
-    AppComponent,
-    // ... altri componenti
-  ],
   imports: [
-    BrowserModule,
-    HttpClientModule,
-    // ... altri moduli
+    CommonModule,
+    RouterModule.forChild(routes)
   ],
-  providers: [
-    // Configurazione interceptor per gestire JWT e CSRF
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: AuthInterceptor,
-      multi: true
-    },
-    // Altri provider
-  ],
-  bootstrap: [AppComponent]
+  exports: [
+    RouterModule
+  ]
 })
-export class AppModule { }
+export class AuthModule { }
 ```
 
 ## 3. Best Practices e Considerazioni sulla Sicurezza
@@ -816,4 +882,105 @@ export class IdleMonitorService {
 - [ ] Implementazione della gestione errori e rate limiting
 - [ ] Integrazione con il sistema di notifiche dell'applicazione
 - [ ] Test di sicurezza (XSS, CSRF, Injection)
-</rewritten_file>
+
+## 5. Implementazione del Servizio Email
+
+### 5.1 Panoramica
+
+Il sistema di autenticazione include un servizio di email per:
+- Reset password
+- Notifiche di sicurezza
+- Verifica degli account
+
+### 5.2 Configurazione di SendGrid
+
+Per completare la configurazione del servizio email, seguire questi passi:
+
+1. **Registrarsi su SendGrid**:
+   - Visitare [SendGrid](https://sendgrid.com/) e creare un account gratuito
+   - Il piano gratuito offre 100 email al giorno, sufficienti per un ambiente di test
+
+2. **Generare una API Key**:
+   - Dopo l'accesso, andare su `Settings > API Keys`
+   - Creare una nuova API Key con permessi "Mail Send"
+   - Copiare l'API Key generata (sarà mostrata solo una volta)
+
+3. **Configurare il dominio mittente**:
+   - Andare su `Settings > Sender Authentication`
+   - Seguire la procedura guidata per configurare il dominio
+   - Aggiungere i record DNS richiesti al proprio provider DNS:
+     - CNAME record: `em._domainkey.yourdomain.com`
+     - CNAME record: `s1._domainkey.yourdomain.com`
+     - CNAME record: `s2._domainkey.yourdomain.com`
+     - TXT record: `_dmarc.yourdomain.com`
+
+4. **Aggiornare le variabili d'ambiente**:
+   - Modificare il file `.env` e decommentare/aggiornare queste variabili:
+     ```
+     SENDGRID_API_KEY="YOUR_API_KEY"
+     SENDGRID_FROM_EMAIL="no-reply@yourdomain.com"
+     SENDGRID_FROM_NAME="Your App Name"
+     FRONTEND_URL="https://yourdomain.com"
+     ```
+
+5. **Testare l'invio email**:
+   - Utilizzare l'endpoint `/api/auth/forgot-password` per testare l'invio
+   - Verificare i log del server per confermare il corretto funzionamento
+
+### 5.3 Gestione dei Token di Reset Password
+
+Il sistema implementa un meccanismo sicuro per la gestione dei token di reset:
+
+1. **Generazione Token**:
+   - Quando un utente richiede il reset, viene generato un token sicuro
+   - Il token è associato all'utente e ha una validità limitata (default: 24 ore)
+   - I token precedenti dello stesso utente vengono invalidati
+
+2. **Verifica Token**:
+   - Il token può essere utilizzato una sola volta
+   - Viene verificato che non sia scaduto o già utilizzato
+   - Dopo il reset, il token viene marcato come utilizzato
+
+3. **Sicurezza**:
+   - Dopo il reset della password, tutti i token di refresh dell'utente vengono revocati
+   - L'utente riceve una notifica email di conferma del reset
+   - L'endpoint di richiesta reset ha un rate limit di 3 tentativi all'ora
+
+### 5.4 Template Email
+
+I template email sono HTML responsive e includono:
+- Stili inline per compatibilità con i client email
+- Design con colori personalizzabili
+- Pulsanti call-to-action
+- Informazioni sulla scadenza
+- Link alternativi per dispositivi mobili
+
+### 5.5 Completamento Configurazione (TODO)
+
+Prima di utilizzare in produzione, è necessario:
+
+- [ ] Registrare un account SendGrid
+- [ ] Generare una API Key
+- [ ] Configurare il dominio mittente e verificare i DNS
+- [ ] Aggiornare le variabili d'ambiente
+- [ ] Testare il flusso completo di invio email e reset password
+- [ ] Personalizzare i template email con il brand dell'applicazione
+
+## 6. Checklist di integrazione completa
+
+- [ ] Installazione delle librerie necessarie
+- [ ] Implementazione del servizio AuthService
+- [ ] Implementazione dell'interceptor per JWT e CSRF
+- [ ] Implementazione del guard per le rotte protette
+- [ ] Creazione dei componenti di login, registrazione e gestione password
+- [ ] Configurazione del modulo app con gli interceptor
+- [ ] Test completo del flusso di autenticazione
+- [ ] Implementazione della gestione errori e rate limiting
+- [ ] Integrazione con il sistema di notifiche dell'applicazione
+- [ ] Test di sicurezza (XSS, CSRF, Injection)
+- [ ] Implementazione del servizio email
+- [ ] Configurazione di SendGrid
+- [ ] Test dell'invio email
+- [ ] Gestione dei token di reset password
+- [ ] Template email
+- [ ] Completamento configurazione
