@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
@@ -21,6 +21,7 @@ from app.core.auth import (
 )
 from app.config import settings
 from app.utils.rate_limiter import limiter
+from app.utils.csrf import generate_csrf_token, csrf_protect
 
 # Configurazione del logging
 logging.basicConfig(level=logging.INFO)
@@ -357,6 +358,35 @@ async def change_password(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Errore interno del server: {str(e)}"
         )
+
+@router.get("/csrf-token", status_code=status.HTTP_200_OK)
+async def get_csrf_token(response: Response):
+    """
+    Genera un nuovo token CSRF e lo restituisce
+    Il token viene impostato anche come cookie HttpOnly
+    Il client deve includere il valore del token CSRF nell'header X-CSRF-Token per le richieste POST/PUT/DELETE
+    """
+    # Genera un nuovo token CSRF
+    csrf_data = generate_csrf_token()
+    
+    # Imposta il cookie con il token
+    cookie_options = {
+        "key": "csrf_token",
+        "value": csrf_data["token"],
+        "httponly": True,
+        "samesite": "lax",
+        "secure": settings.enable_ssl_redirect,  # true in produzione con HTTPS
+        "max_age": settings.csrf_token_expire_minutes * 60,
+        "path": "/"
+    }
+    
+    response.set_cookie(**cookie_options)
+    
+    # Restituisci il token CSRF al client
+    return {
+        "csrf_token": csrf_data["csrf_token"],
+        "expires": csrf_data["expires"]
+    }
 
 # Funzione di supporto per la validazione della password
 def validate_password(password: str) -> None:

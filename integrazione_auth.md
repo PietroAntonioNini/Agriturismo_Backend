@@ -1,12 +1,12 @@
-# Guida all'Integrazione dell'Autenticazione
+# Guida all'Integrazione dell'Autenticazione e Sicurezza
 
-Questo documento fornisce dettagli sull'implementazione dell'autenticazione nel backend FastAPI e come integrare queste funzionalità con il frontend Angular.
+Questo documento fornisce dettagli sull'implementazione dell'autenticazione e sicurezza nel backend FastAPI e come integrare queste funzionalità con il frontend Angular.
 
 ## 1. Implementazione Backend
 
 ### 1.1 Panoramica
 
-Il backend implementa un sistema di autenticazione completo utilizzando:
+Il backend implementa un sistema di autenticazione e sicurezza completo utilizzando:
 - JWT (JSON Web Token) per la gestione delle sessioni
 - Refresh Token per l'autenticazione persistente
 - Hashing delle password con bcrypt
@@ -14,6 +14,9 @@ Il backend implementa un sistema di autenticazione completo utilizzando:
 - Rate limiting per protezione contro attacchi
 - Validazione password per garantire sicurezza
 - Caching per migliorare le performance
+- Security Headers per protezione avanzata
+- Protezione CSRF per prevenire attacchi Cross-Site Request Forgery
+- Redirect HTTPS per garantire connessioni sicure
 
 ### 1.2 Tabella utenti
 
@@ -24,14 +27,14 @@ users
 ├── id (Integer, PK) - Identificativo univoco
 ├── username (String, unique) - Nome utente
 ├── email (String, unique) - Email
-├── hashed_password (String) - Password criptata
-├── first_name (String) - Nome
-├── last_name (String) - Cognome
+├── hashedPassword (String) - Password criptata
+├── firstName (String) - Nome
+├── lastName (String) - Cognome
 ├── role (String) - Ruolo (admin, manager, staff)
-├── is_active (Boolean) - Stato dell'account
-├── last_login (DateTime) - Data ultimo accesso
-├── created_at (DateTime) - Data creazione
-└── updated_at (DateTime) - Data aggiornamento
+├── isActive (Boolean) - Stato dell'account
+├── lastLogin (DateTime) - Data ultimo accesso
+├── createdAt (DateTime) - Data creazione
+└── updatedAt (DateTime) - Data aggiornamento
 ```
 
 La tabella `refresh_tokens` contiene:
@@ -60,6 +63,7 @@ refresh_tokens
 | POST | `/api/auth/logout-all` | Revoca tutti i token | - | Messaggio di successo |
 | GET | `/api/auth/verify-token` | Verifica validità token | - | Informazioni utente |
 | PUT | `/api/auth/change-password` | Cambia password | `currentPassword`, `newPassword` | Messaggio di successo |
+| GET | `/api/auth/csrf-token` | Ottiene token CSRF | - | `csrf_token`, `expires` |
 
 #### 1.3.2 Utenti
 
@@ -117,6 +121,14 @@ refresh_tokens
 }
 ```
 
+#### CSRF Token Response
+```json
+{
+  "csrf_token": "string",
+  "expires": "2023-01-01T00:00:00.000Z"
+}
+```
+
 ### 1.5 Formato e Sicurezza JWT
 
 I token JWT contengono le seguenti informazioni (payload):
@@ -159,18 +171,36 @@ Per garantire sicurezza, le password devono rispettare i seguenti requisiti:
 - Almeno un numero
 - Almeno un carattere speciale
 
-### 1.9 Caching
+### 1.9 Security Headers
+
+Il backend implementa diversi header di sicurezza:
+- `Strict-Transport-Security`: Forza l'uso di HTTPS
+- `Content-Security-Policy`: Previene attacchi XSS
+- `X-Content-Type-Options`: Previene il MIME sniffing
+- `X-Frame-Options`: Protegge dal clickjacking
+- `X-XSS-Protection`: Protezione XSS aggiuntiva
+- `Referrer-Policy`: Limita le informazioni nei header referer
+- `Permissions-Policy`: Controlla l'accesso alle API del browser
+
+### 1.10 Protezione CSRF
+
+Il backend implementa protezione CSRF per le operazioni POST/PUT/DELETE:
+- Token JWT firmati con una chiave segreta
+- Cookie HttpOnly per il token CSRF
+- Validazione dei token per le operazioni di modifica
+
+### 1.11 Caching
 
 Le richieste GET vengono memorizzate nella cache per migliorare le performance:
 - Durata predefinita: 60 secondi
-- Esclusione degli endpoint di autenticazione
+- Esclusione degli endpoint di autenticazione e dati utente
 - Inclusione di header di cache per controllo client-side
 
 ## 2. Guida all'Integrazione con Frontend Angular
 
 ### 2.1 Configurazione richiesta
 
-Per integrare l'autenticazione con Angular:
+Per integrare l'autenticazione e sicurezza con Angular:
 
 1. Installa le librerie necessarie:
 ```bash
@@ -182,6 +212,7 @@ npm install @auth0/angular-jwt
    - Aggiunga automaticamente il token a tutte le richieste API
    - Intercetti le risposte 401 per il refresh automatico del token
    - Implementi logout locale e remoto
+   - Gestisca la protezione CSRF
 
 3. Crea componenti per:
    - Login
@@ -190,7 +221,7 @@ npm install @auth0/angular-jwt
    - Protezione delle rotte private
    - Gestione errori di autenticazione
 
-### 2.2 Interazione con gli endpoint
+### 2.2 Interazione con gli endpoint di autenticazione
 
 #### Login
 ```typescript
@@ -233,6 +264,7 @@ this.http.post('/api/auth/logout', { refresh_token: refreshToken })
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('expires_at');
+    localStorage.removeItem('csrf_token'); // Rimuovi anche il token CSRF
     // Reindirizzamento al login
   });
 
@@ -243,6 +275,7 @@ this.http.post('/api/auth/logout-all', {})
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('expires_at');
+    localStorage.removeItem('csrf_token'); // Rimuovi anche il token CSRF
     // Reindirizzamento al login
   });
 ```
@@ -255,8 +288,10 @@ const passwordData = {
   newPassword: 'new-password'
 };
 
-// Richiesta di cambio password
-this.http.put('/api/auth/change-password', passwordData)
+// Richiesta di cambio password (con token CSRF)
+this.http.put('/api/auth/change-password', passwordData, {
+  headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') }
+})
   .subscribe(response => {
     // Gestione risposta
   });
@@ -275,7 +310,31 @@ this.http.get('/api/auth/verify-token')
   });
 ```
 
-### 2.3 Protezione delle rotte
+### 2.3 Implementazione protezione CSRF
+
+#### Ottenere un token CSRF
+```typescript
+// Richiesta per ottenere il token CSRF
+this.http.get<{csrf_token: string, expires: string}>('/api/auth/csrf-token')
+  .subscribe(response => {
+    // Salva il token CSRF (il cookie viene impostato automaticamente dal backend)
+    localStorage.setItem('csrf_token', response.csrf_token);
+  });
+```
+
+#### Aggiungere il token CSRF alle richieste POST/PUT/DELETE
+```typescript
+// Esempio di invio dati con protezione CSRF
+const data = { /* i dati da inviare */ };
+this.http.post('/api/endpoint', data, {
+  headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') }
+})
+  .subscribe(response => {
+    // Gestione risposta
+  });
+```
+
+### 2.4 Protezione delle rotte
 
 Utilizzare il guard di Angular per proteggere le rotte:
 
@@ -306,36 +365,47 @@ export class AuthGuard implements CanActivate {
 }
 ```
 
-### 2.4 Gestione automatizzata refresh token
+### 2.5 Interceptor HTTP con gestione CSRF e JWT
 
-Implementare un interceptor che gestisca automaticamente i refresh token:
+Implementare un interceptor HTTP che gestisca automaticamente i token JWT e CSRF:
 
 ```typescript
-// token.interceptor.ts
+// auth.interceptor.ts
 @Injectable()
-export class TokenInterceptor implements HttpInterceptor {
+export class AuthInterceptor implements HttpInterceptor {
   private isRefreshing = false;
   private refreshTokenSubject: BehaviorSubject<any> = new BehaviorSubject<any>(null);
 
   constructor(private authService: AuthService) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    // Aggiungi token a tutte le richieste non di autenticazione
+    // Aggiungi JWT token a tutte le richieste (tranne login e refresh)
     if (!request.url.includes('/auth/login') && !request.url.includes('/auth/refresh-token')) {
-      request = this.addToken(request);
+      request = this.addAuthToken(request);
+    }
+
+    // Aggiungi CSRF token a tutte le richieste di modifica (POST/PUT/DELETE/PATCH)
+    if (this.requiresCsrfToken(request.method)) {
+      request = this.addCsrfToken(request);
     }
 
     return next.handle(request).pipe(
       catchError(error => {
-        if (error instanceof HttpErrorResponse && error.status === 401) {
-          return this.handle401Error(request, next);
+        if (error instanceof HttpErrorResponse) {
+          if (error.status === 401) {
+            // Gestione errore 401 (Unauthorized)
+            return this.handle401Error(request, next);
+          } else if (error.status === 403 && error.error?.detail?.includes('CSRF')) {
+            // Gestione errore CSRF
+            return this.handleCsrfError(request, next);
+          }
         }
         return throwError(error);
       })
     );
   }
 
-  private addToken(request: HttpRequest<any>): HttpRequest<any> {
+  private addAuthToken(request: HttpRequest<any>): HttpRequest<any> {
     const token = localStorage.getItem('access_token');
     
     if (token) {
@@ -355,6 +425,31 @@ export class TokenInterceptor implements HttpInterceptor {
     return request;
   }
 
+  private addCsrfToken(request: HttpRequest<any>): HttpRequest<any> {
+    const csrfToken = localStorage.getItem('csrf_token');
+    
+    if (csrfToken) {
+      return request.clone({
+        setHeaders: { 'X-CSRF-Token': csrfToken }
+      });
+    }
+    return request;
+  }
+
+  private requiresCsrfToken(method: string): boolean {
+    return ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+  }
+
+  private handleCsrfError(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Richiedi un nuovo token CSRF e riprova la richiesta
+    return this.authService.getCsrfToken().pipe(
+      switchMap(token => {
+        localStorage.setItem('csrf_token', token.csrf_token);
+        return next.handle(this.addCsrfToken(request));
+      })
+    );
+  }
+
   private handle401Error(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     if (!this.isRefreshing) {
       this.isRefreshing = true;
@@ -364,7 +459,7 @@ export class TokenInterceptor implements HttpInterceptor {
         switchMap(token => {
           this.isRefreshing = false;
           this.refreshTokenSubject.next(token.accessToken);
-          return next.handle(this.addToken(request));
+          return next.handle(this.addAuthToken(request));
         }),
         catchError(error => {
           this.isRefreshing = false;
@@ -376,7 +471,7 @@ export class TokenInterceptor implements HttpInterceptor {
       return this.refreshTokenSubject.pipe(
         filter(token => token != null),
         take(1),
-        switchMap(jwt => next.handle(this.addToken(request)))
+        switchMap(jwt => next.handle(this.addAuthToken(request)))
       );
     }
   }
@@ -387,48 +482,9 @@ export class TokenInterceptor implements HttpInterceptor {
 }
 ```
 
-## 3. Best Practices e Considerazioni sulla Sicurezza
+### 2.6 Servizio di autenticazione completo
 
-1. **Memorizzazione sicura**:
-   - Salvare token JWT in localStorage per sessioni brevi o sessionStorage per maggiore sicurezza
-   - Considerare l'uso di cookie HttpOnly per il refresh token in produzione
-
-2. **Refresh token**:
-   - Implementare sempre un check della scadenza prima di ogni richiesta
-   - Gestire i casi di token revocati o non validi con reindirizzamento al login
-   - Assicurarsi che il logout revochi sempre il refresh token sul server
-
-3. **HTTPS**:
-   - Utilizzare HTTPS in tutti gli ambienti, inclusi test e sviluppo
-   - Configurare correttamente i cookie con flag Secure e HttpOnly
-   - Impostare header di sicurezza come HSTS
-
-4. **CORS**:
-   - Il backend è già configurato per accettare richieste da origini specifiche
-   - Mantenere aggiornata la lista delle origini consentite in `settings.cors_origins`
-   - Utilizzare credenziali nelle richieste CORS (`withCredentials: true`)
-
-5. **XSS e CSRF**:
-   - Sanitizzare tutti gli input utente con l'apposito servizio Angular
-   - Evitare l'uso di `innerHTML` o altre API che potrebbero causare vulnerabilità XSS
-   - Implementare CSRF token per operazioni critiche
-
-6. **Rate Limiting**:
-   - Il backend implementa limiti di richieste per prevenire attacchi di forza bruta
-   - Gestire le risposte 429 (Too Many Requests) con exponential backoff
-   - Aggiungere indicatori visivi durante i tentativi di login/registrazione
-
-7. **Password Sicure**:
-   - Implementare un indicatore di robustezza password in fase di registrazione
-   - Fornire suggerimenti all'utente sulle regole per la creazione di password
-   - Limitare i tentativi falliti di login con un sistema di blocco temporaneo
-
-8. **Caching**:
-   - Utilizzare correttamente gli header di cache nelle richieste Angular
-   - Non memorizzare informazioni sensibili nella cache del browser
-   - Sfruttare il caching del server per risorse frequentemente utilizzate
-
-## 4. Esempio di Implementazione del Servizio Auth in Angular
+Implementare un servizio di autenticazione che gestisca JWT, Refresh Token e CSRF:
 
 ```typescript
 // auth.service.ts
@@ -442,6 +498,8 @@ export class AuthService {
   constructor(private http: HttpClient, private router: Router) {
     // Verifica il token all'avvio dell'applicazione
     this.checkToken();
+    // Richiedi un token CSRF all'avvio
+    this.getCsrfToken().subscribe();
   }
   
   login(username: string, password: string): Observable<any> {
@@ -452,6 +510,8 @@ export class AuthService {
           this.storeTokens(response);
           // Carica i dati utente
           this.loadUserProfile();
+          // Richiedi un nuovo token CSRF dopo il login
+          this.getCsrfToken().subscribe();
           return response;
         })
       );
@@ -459,6 +519,15 @@ export class AuthService {
   
   register(user: any): Observable<any> {
     return this.http.post('/api/auth/register', user);
+  }
+  
+  getCsrfToken(): Observable<{csrf_token: string, expires: string}> {
+    return this.http.get<{csrf_token: string, expires: string}>('/api/auth/csrf-token')
+      .pipe(
+        tap(response => {
+          localStorage.setItem('csrf_token', response.csrf_token);
+        })
+      );
   }
   
   refreshToken(): Observable<TokenPair> {
@@ -549,6 +618,7 @@ export class AuthService {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('expires_at');
+    localStorage.removeItem('csrf_token');
     this.currentUserSubject.next(null);
     this.router.navigate(['/login']);
   }
@@ -559,3 +629,191 @@ export class AuthService {
     }
   }
 }
+```
+
+### 2.7 Configurazione modulo app per il sistema di autenticazione
+
+```typescript
+// app.module.ts
+@NgModule({
+  declarations: [
+    AppComponent,
+    // ... altri componenti
+  ],
+  imports: [
+    BrowserModule,
+    HttpClientModule,
+    // ... altri moduli
+  ],
+  providers: [
+    // Configurazione interceptor per gestire JWT e CSRF
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    },
+    // Altri provider
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+```
+
+## 3. Best Practices e Considerazioni sulla Sicurezza
+
+### 3.1 Gestione sicura dei token
+
+- **Access Token JWT**:
+  - Memorizzare in localStorage/sessionStorage (compromesso tra sicurezza e usabilità)
+  - Impostare una durata breve (30-60 minuti)
+  - Non memorizzare dati sensibili nel payload
+
+- **Refresh Token**:
+  - Memorizzare in localStorage o preferibilmente in cookie HttpOnly
+  - Verificare sempre lato server che non sia stato revocato
+  - Usare una durata più lunga (es. 30 giorni) per comodità dell'utente
+
+- **CSRF Token**:
+  - Il cookie è gestito automaticamente dal browser (HttpOnly)
+  - Memorizzare il valore del token in localStorage/sessionStorage
+  - Rinnovare periodicamente o dopo operazioni sensibili
+
+### 3.2 HTTPS e Secure Cookies
+
+- Utilizzare HTTPS in tutti gli ambienti (anche sviluppo)
+- Impostare flag `Secure` e `HttpOnly` sui cookie
+- Implementare HSTS (Strict-Transport-Security) per evitare attacchi downgrade
+
+### 3.3 Gestione degli errori
+
+- Gestire errori di autorizzazione (401) con refresh automatico
+- Gestire errori CSRF (403) con richiesta di nuovo token
+- Gestire errori di Rate Limit (429) con backoff esponenziale
+- Mostrare messaggi di errore user-friendly senza esporre dettagli tecnici
+
+### 3.4 Gestione del Rate Limiting
+
+```typescript
+// Esempio di gestione del rate limiting con backoff esponenziale
+@Injectable()
+export class RateLimitingInterceptor implements HttpInterceptor {
+  private retryDelay = 1000; // 1 secondo
+  private maxRetries = 3;
+  
+  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    return next.handle(request).pipe(
+      retryWhen(errors => errors.pipe(
+        concatMap((error, count) => {
+          // Gestisce solo errori 429 (Too Many Requests)
+          if (error.status !== 429 || count >= this.maxRetries) {
+            return throwError(error);
+          }
+          
+          // Calcola il backoff esponenziale
+          const delay = this.retryDelay * Math.pow(2, count);
+          console.log(`Rate limited. Retrying in ${delay}ms`);
+          
+          // Mostra un messaggio all'utente
+          this.notificationService.warn('Troppe richieste, riprova tra poco');
+          
+          // Ritarda la richiesta successiva
+          return timer(delay);
+        })
+      ))
+    );
+  }
+}
+```
+
+### 3.5 Validazione e Sanitizzazione Input
+
+```typescript
+// Esempio di validazione password lato frontend
+export function passwordValidator(): ValidatorFn {
+  return (control: AbstractControl): {[key: string]: any} | null => {
+    const value = control.value;
+    
+    if (!value) {
+      return null;
+    }
+    
+    const hasUpperCase = /[A-Z]/.test(value);
+    const hasLowerCase = /[a-z]/.test(value);
+    const hasNumeric = /[0-9]/.test(value);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(value);
+    
+    const passwordValid = hasUpperCase && hasLowerCase && hasNumeric && hasSpecial && value.length >= 8;
+    
+    return !passwordValid ? { invalidPassword: true } : null;
+  };
+}
+
+// Sanitizzazione input per prevenire XSS
+@Pipe({name: 'safeHtml'})
+export class SafeHtmlPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+  
+  transform(value: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(value);
+  }
+}
+```
+
+### 3.6 Gestione della Sessione
+
+- Implementare logout automatico dopo inattività
+- Offrire opzione "Ricordami" per sessioni più lunghe
+- Permettere all'utente di visualizzare e terminare sessioni attive
+
+```typescript
+// Esempio di servizio per il monitoraggio dell'inattività
+@Injectable({
+  providedIn: 'root'
+})
+export class IdleMonitorService {
+  private idle$ = new Subject<boolean>();
+  private idleTimeout = 15 * 60 * 1000; // 15 minuti di inattività
+  private idleTimer: any;
+  
+  constructor(private authService: AuthService) {
+    // Monitoraggio eventi utente
+    fromEvent(document, 'mousemove').pipe(
+      throttleTime(1000)
+    ).subscribe(() => this.resetIdleTimer());
+    
+    fromEvent(document, 'keypress').subscribe(() => this.resetIdleTimer());
+    
+    this.idle$.pipe(
+      filter(idle => idle === true)
+    ).subscribe(() => {
+      // Logout automatico dopo inattività
+      this.authService.logout();
+      alert('La tua sessione è scaduta per inattività.');
+    });
+    
+    // Inizializza timer
+    this.resetIdleTimer();
+  }
+  
+  private resetIdleTimer(): void {
+    clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idle$.next(true);
+    }, this.idleTimeout);
+  }
+}
+```
+
+## 4. Checklist di integrazione
+
+- [ ] Installazione delle librerie necessarie
+- [ ] Implementazione del servizio AuthService
+- [ ] Implementazione dell'interceptor per JWT e CSRF
+- [ ] Implementazione del guard per le rotte protette
+- [ ] Creazione dei componenti di login, registrazione e gestione password
+- [ ] Configurazione del modulo app con gli interceptor
+- [ ] Test completo del flusso di autenticazione
+- [ ] Implementazione della gestione errori e rate limiting
+- [ ] Integrazione con il sistema di notifiche dell'applicazione
+- [ ] Test di sicurezza (XSS, CSRF, Injection)
+</rewritten_file>

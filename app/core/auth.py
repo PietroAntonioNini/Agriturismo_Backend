@@ -192,7 +192,7 @@ async def get_current_user(
             
         logger.info(f"Utente trovato: {user}")
         # Update last login time
-        user.last_login = datetime.utcnow()
+        user.lastLogin = datetime.utcnow()
         db.commit()
         return user
     except HTTPException as h:

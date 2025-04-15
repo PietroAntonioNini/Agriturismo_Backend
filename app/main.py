@@ -11,6 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
+from starlette.responses import RedirectResponse
 
 from app.config import settings
 from app.routers import apartments, tenants, leases, utilities, auth, users
@@ -64,12 +65,23 @@ async def cache_middleware(request: Request, call_next):
     if request.method != "GET":
         return await call_next(request)
     
-    # Ignora caching per endpoint di autenticazione
-    if "/auth/" in request.url.path:
+    # Ignora caching per endpoint di autenticazione e utenti
+    if "/auth/" in request.url.path or "/users/" in request.url.path:
+        return await call_next(request)
+    
+    # Ignora caching se l'utente è autenticato (header Authorization presente)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return await call_next(request)
+    
+    # Ignora crawler e bot
+    user_agent = request.headers.get("User-Agent", "").lower()
+    bot_patterns = ["bot", "crawler", "spider", "slurp", "baiduspider", "yandex"]
+    if any(pattern in user_agent for pattern in bot_patterns):
         return await call_next(request)
     
     # Genera chiave di cache
-    cache_key = f"{request.method}:{request.url.path}"
+    cache_key = f"{request.method}:{request.url.path}:{request.query_params}"
     
     # Per ora gestiamo il caching in-memory (in produzione si userebbe Redis)
     # Questo è solo un esempio dimostrativo, in produzione serve una soluzione più robusta
@@ -135,6 +147,54 @@ async def performance_middleware(request: Request, call_next):
     # Aggiungi header con il tempo di elaborazione
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+# Middleware per aggiungere security headers
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    
+    # Strict-Transport-Security: indica al browser di usare sempre HTTPS
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    # Content-Security-Policy: previene XSS e altri attacchi di code injection
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'self'"
+    
+    # X-Content-Type-Options: previene lo sniffing MIME
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    
+    # X-Frame-Options: previene clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    
+    # X-XSS-Protection: protezione XSS per browser più vecchi
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    
+    # Referrer-Policy: limita le informazioni passate in header referer
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Permissions-Policy: controlla quali API browser possono essere usate
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    
+    return response
+
+# Middleware per reindirizzare HTTP a HTTPS in produzione
+@app.middleware("http")
+async def https_redirect_middleware(request: Request, call_next):
+    # Controlla se il redirect è abilitato nelle impostazioni
+    if not settings.enable_ssl_redirect:
+        return await call_next(request)
+    
+    # Controlla se la richiesta è già HTTPS
+    if request.url.scheme == "https":
+        return await call_next(request)
+    
+    # In produzione, X-Forwarded-Proto potrebbe essere impostato dal load balancer
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto == "https":
+        return await call_next(request)
+    
+    # Reindirizza a HTTPS
+    https_url = str(request.url).replace("http://", "https://", 1)
+    return RedirectResponse(https_url, status_code=status.HTTP_301_MOVED_PERMANENTLY)
 
 # Configurazione avanzata di CORS per supportare le richieste autenticate dal frontend
 app.add_middleware(

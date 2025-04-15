@@ -2,6 +2,7 @@ import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 import logging
+import secrets
 
 load_dotenv()
 
@@ -33,6 +34,10 @@ class Settings(BaseSettings):
     # Configurazioni per caching
     cache_enabled: bool = os.getenv("CACHE_ENABLED", "True").lower() == "true"
     cache_expire_seconds: int = int(os.getenv("CACHE_EXPIRE_SECONDS", "60"))
+    # Security settings
+    csrf_secret: str = os.getenv("CSRF_SECRET", secrets.token_hex(32))
+    csrf_token_expire_minutes: int = int(os.getenv("CSRF_TOKEN_EXPIRE_MINUTES", "60"))
+    enable_ssl_redirect: bool = os.getenv("ENABLE_SSL_REDIRECT", "False").lower() == "true"
 
 settings = Settings()
 
