@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14
+    container_name: agriturismo_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1312
+      POSTGRES_DB: agriturismo_new
+      # Aggiungere queste impostazioni per migliorare la sincronizzazione
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: >
+      postgres 
+        -c synchronous_commit=on 
+        -c fsync=on
+        -c full_page_writes=on
+        -c checkpoint_timeout=30
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

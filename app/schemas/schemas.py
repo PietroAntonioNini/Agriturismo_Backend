@@ -127,6 +127,14 @@ class Tenant(TenantBase):
     createdAt: datetime
     updatedAt: datetime
 
+# ------------------ SCHEMA TENANT DOCUMENT ------------------
+
+class DocumentResponse(CamelCaseModel):
+    success: bool
+    imageUrl: Optional[str] = None
+    detail: Optional[str] = None
+    timestamp: Optional[int] = None
+
 # ------------------ SCHEMA LEASE DOCUMENT ------------------
 class LeaseDocumentBase(CamelCaseModel):
     leaseId: int

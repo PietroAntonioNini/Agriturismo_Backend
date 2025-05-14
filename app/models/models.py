@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
+import time
 from datetime import datetime
 
 from app.database import Base
@@ -157,6 +158,22 @@ class Tenant(Base):
     # Relazioni
     leases = relationship("Lease", back_populates="tenant")
     invoices = relationship("Invoice", back_populates="tenant")
+
+    @property
+    def documentFrontImageUrl(self):
+        """Ritorna l'URL completo con parametro anti-cache se esiste un'immagine."""
+        if self.documentFrontImage:
+            timestamp = int(time.time())
+            return f"{self.documentFrontImage}?t={timestamp}"
+        return None
+    
+    @property
+    def documentBackImageUrl(self):
+        """Ritorna l'URL completo con parametro anti-cache se esiste un'immagine."""
+        if self.documentBackImage:
+            timestamp = int(time.time())
+            return f"{self.documentBackImage}?t={timestamp}"
+        return None
 
 class Lease(Base):
     __tablename__ = "leases"

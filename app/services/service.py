@@ -6,6 +6,9 @@ import shutil
 from datetime import datetime, timedelta
 import uuid
 from typing import List, Optional, Dict, Any
+import time
+import imghdr  # Per la validazione del tipo di immagine
+import aiofiles  # Per operazioni asincrone sui file
 
 from app.models import models
 from app.schemas import schemas
@@ -16,7 +19,7 @@ from app.schemas import schemas
 
 def get_apartments(
     db: Session, 
-    skip: int = 0, 
+    skip: int = 0,  
     limit: int = 100, 
     status: Optional[str] = None,
     floor: Optional[int] = None,
@@ -287,7 +290,38 @@ def get_apartment_invoices(
 # ----- Tenant Services -----
 
 def get_tenants(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Tenant).offset(skip).limit(limit).all()
+    """Ottiene tutti i tenant con query diretta e sorting ottimizzato."""
+    try:
+        # Forza un commit e svuota completamente la cache
+        db.commit()
+        db.expire_all()
+        
+        # Usa una query SQL diretta per evitare problemi di cache
+        from sqlalchemy.sql import text
+        result = db.execute(
+            text("""
+                SELECT * FROM tenants 
+                ORDER BY id DESC
+                LIMIT :limit OFFSET :skip
+            """), 
+            {"limit": limit, "skip": skip}
+        ).fetchall()
+        
+        # Trasforma i risultati in oggetti Tenant
+        tenants = []
+        if result:
+            for row in result:
+                # Crea un dizionario dai risultati
+                tenant_dict = {column: value for column, value in zip(result.keys(), row)}
+                # Crea un oggetto Tenant dal dizionario
+                tenant = models.Tenant(**tenant_dict)
+                tenants.append(tenant)
+        
+        return tenants
+    except Exception as e:
+        print(f"Errore nella funzione get_tenants: {str(e)}")
+        # In caso di errore, prova il metodo standard come fallback
+        return db.query(models.Tenant).order_by(models.Tenant.id.desc()).offset(skip).limit(limit).all()
 
 def get_tenant(db: Session, tenantId: int):
     return db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
@@ -298,14 +332,17 @@ def create_tenant(db: Session, tenant: schemas.TenantCreate):
     
     # Handle nested dict for communication_preferences
     if "communicationPreferences" in tenant_data:
-        # Check if it's a Pydantic model or already a dict
         if hasattr(tenant_data["communicationPreferences"], "dict"):
             tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
-        # If it's already a dict, leave it as is
     
     db_tenant = models.Tenant(**tenant_data)
     db.add(db_tenant)
+    
+    # Esegui flush prima del commit per assicurarti che tutte le operazioni siano completate
+    db.flush()
     db.commit()
+    
+    # Ricarica dal database per assicurarti di avere la versione più recente
     db.refresh(db_tenant)
     return db_tenant
 
@@ -327,8 +364,19 @@ def update_tenant(db: Session, tenantId: int, tenant: schemas.TenantCreate):
     return db_tenant
 
 def delete_tenant(db: Session, tenantId: int):
+    """Delete a tenant and all associated files."""
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
+        try:
+            # Percorso della cartella del tenant
+            tenant_dir = f"static/tenants/{tenantId}"
+            if os.path.exists(tenant_dir):
+                shutil.rmtree(tenant_dir)
+                print(f"Deleted tenant directory: {tenant_dir}")
+        except Exception as e:
+            print(f"Error deleting tenant directory: {e}")
+        
+        # Elimina il tenant dal database
         db.delete(db_tenant)
         db.commit()
         return True
@@ -343,35 +391,151 @@ def update_tenant_communication_preferences(db: Session, tenantId: int, preferen
         db.refresh(db_tenant)
     return db_tenant
 
+# In service.py
 async def save_tenant_document(tenantId: int, file: UploadFile, doc_type: str):
-    """Save a tenant document image and return the URL."""
-    # Create directory for tenant documents if it doesn't exist
-    upload_dir = f"static/tenants/{tenantId}/documents"
-    os.makedirs(upload_dir, exist_ok=True)
+    """Salva in modo efficiente il documento di un tenant e restituisce l'URL."""
+    # Validazione del tipo di file
+    content_type = file.content_type
+    if not content_type or not content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="Il file deve essere un'immagine")
     
-    # Generate unique filename
-    filename = f"{doc_type}_{uuid.uuid4()}{os.path.splitext(file.filename)[1] if file.filename else '.jpg'}"
+    # Crea directory con permessi corretti
+    upload_dir = f"static/tenants/{tenantId}/documents"
+    os.makedirs(upload_dir, exist_ok=True, mode=0o755)
+    
+    # Genera nome file più univoco per evitare collisioni
+    timestamp = int(time.time())
+    random_uuid = uuid.uuid4().hex
+    extension = os.path.splitext(file.filename)[1] if file.filename else ".jpg"
+    
+    filename = f"{doc_type}_{timestamp}_{random_uuid}{extension}"
     file_path = f"{upload_dir}/{filename}"
     
-    # Save file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        # Usa una copia temporanea del file prima di spostarlo nella posizione finale
+        temp_path = f"{file_path}.temp"
+        
+        # Utilizzare aiofiles per operazioni asincrone più efficienti
+        async with aiofiles.open(temp_path, 'wb') as out_file:
+            content = await file.read()
+            await out_file.write(content)
+        
+        # Verifica che il file temporaneo sia stato scritto correttamente
+        if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+            raise HTTPException(status_code=500, detail="Errore durante il salvataggio del file")
+        
+        # Rinomina il file temporaneo nel nome finale (operazione atomica)
+        os.rename(temp_path, file_path)
+        
+        # Verifica il tipo di file (prevenire upload di file dannosi mascherati da immagini)
+        file_type = imghdr.what(file_path)
+        if not file_type:
+            os.remove(file_path)
+            raise HTTPException(status_code=400, detail="File non valido o non è un'immagine")
+            
+    except Exception as e:
+        # Gestione errori con pulizia
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Errore durante il salvataggio: {str(e)}")
     
-    # Return the URL path
-    return f"/tenants/{tenantId}/documents/{filename}"
+    # Prepara l'URL con parametro di cache-busting
+    file_url = f"/tenants/{tenantId}/documents/{filename}?v={timestamp}"
+    return file_url
 
 def update_tenant_document(db: Session, tenantId: int, doc_url: str, doc_type: str):
-    """Update tenant document URL in the database."""
+    """Aggiorna il riferimento all'immagine del documento in modo atomico."""
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
-    if db_tenant:
+    if not db_tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trovato")
+    
+    # Inizia una transazione esplicita per garantire l'atomicità
+    try:
+        # Salva l'URL precedente
+        old_url = None
         if doc_type == "front":
-            setattr(db_tenant, "documentFrontImage", doc_url)
+            old_url = db_tenant.documentFrontImage
+            db_tenant.documentFrontImage = doc_url
         elif doc_type == "back":
-            setattr(db_tenant, "documentBackImage", doc_url)
+            old_url = db_tenant.documentBackImage
+            db_tenant.documentBackImage = doc_url
+        else:
+            raise ValueError(f"Tipo di documento non valido: {doc_type}")
         
-        setattr(db_tenant, "updatedAt", datetime.utcnow())
+        db_tenant.updatedAt = datetime.utcnow()
         db.commit()
-        db.refresh(db_tenant)
+        
+        # Elimina il vecchio file dopo aver aggiornato il DB con successo
+        if old_url and old_url != doc_url and old_url != "":
+            try:
+                # Estrai il percorso del file senza parametri di query
+                old_path = old_url.split('?')[0]
+                old_file_path = f"static{old_path}"
+                if os.path.exists(old_file_path) and os.path.isfile(old_file_path):
+                    os.remove(old_file_path)
+                    print(f"File eliminato: {old_file_path}")
+                else:
+                    print(f"File non trovato: {old_file_path}")
+            except Exception as e:
+                # Logga l'errore ma non interrompere l'operazione principale
+                print(f"Errore nella pulizia del file precedente: {e}")
+        
+        return db_tenant
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore durante l'aggiornamento: {str(e)}")
+    
+async def delete_tenant_document(db: Session, tenantId: int, doc_type: str):
+    """Elimina l'immagine del documento in modo sicuro e atomico."""
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
+    if not db_tenant:
+        raise HTTPException(status_code=404, detail="Tenant non trovato")
+    
+    try:
+        # Ottieni il percorso del file
+        file_url = None
+        if doc_type == "front" and db_tenant.documentFrontImage:
+            file_url = db_tenant.documentFrontImage
+            # Aggiorna il tenant nel database (rimuovi il riferimento)
+            db_tenant.documentFrontImage = ""
+        elif doc_type == "back" and db_tenant.documentBackImage:
+            file_url = db_tenant.documentBackImage
+            # Aggiorna il tenant nel database (rimuovi il riferimento)
+            db_tenant.documentBackImage = ""
+        else:
+            return {"detail": "Nessun documento da eliminare"}
+        
+        db_tenant.updatedAt = datetime.utcnow()
+        db.commit()
+        
+        # Elimina il file fisicamente
+        if file_url:
+            # Rimuovi eventuali parametri di query dall'URL
+            clean_url = file_url.split('?')[0]
+            file_path = f"static{clean_url}"
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                os.remove(file_path)
+        
+        return {"detail": "Documento eliminato con successo", "success": True}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore durante l'eliminazione: {str(e)}")
+    
+def create_tenant_without_commit(db: Session, tenant: schemas.TenantCreate):
+    """Crea un tenant senza fare commit della transazione."""
+    tenant_data = tenant.dict() if hasattr(tenant, "dict") else dict(tenant)
+    
+    if "communicationPreferences" in tenant_data:
+        if hasattr(tenant_data["communicationPreferences"], "dict"):
+            tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
+    
+    db_tenant = models.Tenant(**tenant_data)
+    db.add(db_tenant)
+    db.flush()  # Genera l'ID senza fare commit
     return db_tenant
 
 def get_tenant_leases(db: Session, tenantId: int, isActive: Optional[bool] = None):

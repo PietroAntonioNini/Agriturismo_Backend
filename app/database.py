@@ -55,11 +55,19 @@ else:
 # Create the main database engine for the application using the URL from settings
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {}
+    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    # Il parametro isolation_level va FUORI da connect_args
+    isolation_level="READ COMMITTED",
+    pool_pre_ping=True,
+    pool_recycle=3600
 )
 
-# Create SessionLocal class
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Modificare SessionLocal per ottimizzare la gestione delle transazioni
+SessionLocal = sessionmaker(
+    autocommit=False, 
+    autoflush=True,  # Cambiato da False a True 
+    bind=engine
+)
 
 # Create Base class
 Base = declarative_base()
