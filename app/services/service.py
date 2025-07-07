@@ -893,19 +893,29 @@ def get_yearly_utility_statistics(db: Session, year: int):
                 "month": month,
                 "year": year,
                 "apartmentId": apartmentId,
-                "apartment_name": apartment_name,
+                "apartmentName": apartment_name,
                 "electricity": 0,
                 "water": 0,
-                "gas": 0
+                "gas": 0,
+                "electricityCost": 0,
+                "waterCost": 0,
+                "gasCost": 0,
+                "totalCost": 0
             }
         
-        # Add consumption based on type
+        # Add consumption and cost based on type
         if str(reading.type) == "electricity":
             stats_dict[key]["electricity"] += reading.consumption
+            stats_dict[key]["electricityCost"] += reading.totalCost
         elif str(reading.type) == "water":
             stats_dict[key]["water"] += reading.consumption
+            stats_dict[key]["waterCost"] += reading.totalCost
         elif str(reading.type) == "gas":
             stats_dict[key]["gas"] += reading.consumption
+            stats_dict[key]["gasCost"] += reading.totalCost
+        
+        # Update total cost
+        stats_dict[key]["totalCost"] += reading.totalCost
     
     # Convert dictionary to list
     stats_list = list(stats_dict.values())
@@ -932,27 +942,118 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
     for month in range(1, 13):
         monthly_data[month] = {
             "month": month,
+            "monthName": [
+                "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+                "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+            ][month - 1],
             "electricity": 0,
             "water": 0,
-            "gas": 0
+            "gas": 0,
+            "electricityCost": 0,
+            "waterCost": 0,
+            "gasCost": 0,
+            "totalCost": 0
         }
     
     for reading in readings:
         month = reading.readingDate.month
         
-        # Add consumption based on type
+        # Add consumption and cost based on type
         if str(reading.type) == "electricity":
             monthly_data[month]["electricity"] += reading.consumption
+            monthly_data[month]["electricityCost"] += reading.totalCost
         elif str(reading.type) == "water":
             monthly_data[month]["water"] += reading.consumption
+            monthly_data[month]["waterCost"] += reading.totalCost
         elif str(reading.type) == "gas":
             monthly_data[month]["gas"] += reading.consumption
+            monthly_data[month]["gasCost"] += reading.totalCost
+        
+        monthly_data[month]["totalCost"] += reading.totalCost
+    
+    # Calculate yearly totals
+    yearly_totals = {
+        "electricity": sum(month["electricity"] for month in monthly_data.values()),
+        "water": sum(month["water"] for month in monthly_data.values()),
+        "gas": sum(month["gas"] for month in monthly_data.values()),
+        "totalCost": sum(month["totalCost"] for month in monthly_data.values())
+    }
     
     # Create the output structure
     result = {
         "apartmentId": apartmentId,
-        "apartment_name": apartment_name,
-        "monthly_data": list(monthly_data.values())
+        "apartmentName": apartment_name,
+        "monthlyData": list(monthly_data.values()),
+        "yearlyTotals": yearly_totals
     }
     
     return result
+
+def get_utility_statistics_overview(db: Session, year: Optional[int] = None):
+    """Get overall utility statistics."""
+    from datetime import datetime
+    
+    if year is None:
+        year = datetime.now().year
+    
+    # Query all readings for the year
+    readings = db.query(models.UtilityReading).filter(
+        func.extract('year', models.UtilityReading.readingDate) == year
+    ).all()
+    
+    # Get all apartments
+    apartments = db.query(models.Apartment).all()
+    total_apartments = len(apartments)
+    
+    # Calculate totals
+    total_consumption = {"electricity": 0, "water": 0, "gas": 0}
+    total_costs = {"electricity": 0, "water": 0, "gas": 0, "total": 0}
+    
+    # Monthly trend data
+    monthly_trend = {}
+    for month in range(1, 13):
+        monthly_trend[month] = {
+            "month": month,
+            "monthName": [
+                "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+                "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+            ][month - 1],
+            "totalConsumption": 0,
+            "totalCost": 0
+        }
+    
+    for reading in readings:
+        month = reading.readingDate.month
+        
+        # Add to totals
+        if str(reading.type) == "electricity":
+            total_consumption["electricity"] += reading.consumption
+            total_costs["electricity"] += reading.totalCost
+        elif str(reading.type) == "water":
+            total_consumption["water"] += reading.consumption
+            total_costs["water"] += reading.totalCost
+        elif str(reading.type) == "gas":
+            total_consumption["gas"] += reading.consumption
+            total_costs["gas"] += reading.totalCost
+        
+        total_costs["total"] += reading.totalCost
+        
+        # Add to monthly trend
+        monthly_trend[month]["totalConsumption"] += reading.consumption
+        monthly_trend[month]["totalCost"] += reading.totalCost
+    
+    # Calculate averages
+    avg_divisor = max(total_apartments, 1)  # Avoid division by zero
+    average_consumption = {
+        "electricity": total_consumption["electricity"] / avg_divisor,
+        "water": total_consumption["water"] / avg_divisor,
+        "gas": total_consumption["gas"] / avg_divisor
+    }
+    
+    return {
+        "totalApartments": total_apartments,
+        "totalConsumption": total_consumption,
+        "totalCosts": total_costs,
+        "averageConsumption": average_consumption,
+        "monthlyTrend": list(monthly_trend.values())
+    }

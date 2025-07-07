@@ -299,14 +299,15 @@ class TokenData(CamelCaseModel):
     username: Optional[str] = None
     role: Optional[str] = None
 
-# ------------------ SCHEMA UTILITY SUMMARY ------------------
+# ------------------ SCHEMA UTILITY SUMMARY E STATISTICHE ------------------
 class UtilitySummary(CamelCaseModel):
     apartmentId: int
+    apartmentName: str
     month: int
     year: int
-    electricity: dict
-    water: dict
-    gas: dict
+    electricity: Dict[str, float]  # {"consumption": float, "cost": float, "readingsCount": int}
+    water: Dict[str, float]  # {"consumption": float, "cost": float, "readingsCount": int}
+    gas: Dict[str, float]  # {"consumption": float, "cost": float, "readingsCount": int}
     totalCost: float
 
 class MonthlyUtilityData(CamelCaseModel):
@@ -317,8 +318,60 @@ class MonthlyUtilityData(CamelCaseModel):
     electricity: float
     water: float
     gas: float
+    electricityCost: float
+    waterCost: float
+    gasCost: float
+    totalCost: float
+
+class MonthlyData(CamelCaseModel):
+    month: int
+    monthName: str
+    electricity: float
+    water: float
+    gas: float
+    electricityCost: float
+    waterCost: float
+    gasCost: float
+    totalCost: float
+
+class YearlyTotals(CamelCaseModel):
+    electricity: float
+    water: float
+    gas: float
+    totalCost: float
 
 class ApartmentUtilityData(CamelCaseModel):
     apartmentId: int
     apartmentName: str
-    monthlyData: List[dict]
+    monthlyData: List[MonthlyData]
+    yearlyTotals: YearlyTotals
+
+class UtilityStatistics(CamelCaseModel):
+    totalApartments: int
+    totalConsumption: Dict[str, float]  # {"electricity": float, "water": float, "gas": float}
+    totalCosts: Dict[str, float]  # {"electricity": float, "water": float, "gas": float, "total": float}
+    averageConsumption: Dict[str, float]  # {"electricity": float, "water": float, "gas": float}
+    monthlyTrend: List[Dict[str, Union[int, str, float]]]  # [{"month": int, "monthName": str, "totalConsumption": float, "totalCost": float}]
+
+class LastReading(CamelCaseModel):
+    apartmentId: int
+    type: str
+    lastReading: float
+    lastReadingDate: date
+    hasHistory: bool
+
+class UtilityFormData(CamelCaseModel):
+    apartmentId: int
+    type: str
+    readingDate: date
+    currentReading: float
+    unitCost: float
+    notes: Optional[str] = None
+
+class UtilityTypeConfig(CamelCaseModel):
+    type: str
+    label: str
+    unit: str
+    icon: str
+    color: str
+    defaultCost: float

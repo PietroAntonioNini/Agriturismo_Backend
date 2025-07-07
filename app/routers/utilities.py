@@ -189,3 +189,108 @@ def get_apartment_consumption(
 @router.get("/unpaid/list", response_model=List[schemas.UtilityReading])
 def get_unpaid_utility_readings(db: Session = Depends(get_db)):
     return service.get_utility_readings(db, isPaid=False)
+
+# GET utility statistics
+@router.get("/statistics/overview", response_model=schemas.UtilityStatistics)
+def get_utility_statistics_overview(
+    year: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    return service.get_utility_statistics_overview(db, year)
+
+# GET last reading for apartment and type (for form auto-completion)
+@router.get("/last-reading/{apartmentId}/{type}", response_model=schemas.LastReading)
+def get_last_reading_info(
+    apartmentId: int,
+    type: str,
+    db: Session = Depends(get_db)
+):
+    apartment = service.get_apartment(db, apartmentId)
+    if apartment is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    last_reading = service.get_last_utility_reading(db, apartmentId, type)
+    
+    if last_reading is None:
+        return {
+            "apartmentId": apartmentId,
+            "type": type,
+            "lastReading": 0.0,
+            "lastReadingDate": datetime.now().date(),
+            "hasHistory": False
+        }
+    
+    return {
+        "apartmentId": apartmentId,
+        "type": type,
+        "lastReading": last_reading.currentReading,
+        "lastReadingDate": last_reading.readingDate,
+        "hasHistory": True
+    }
+
+# GET utility type configurations
+@router.get("/types", response_model=List[schemas.UtilityTypeConfig])
+def get_utility_types():
+    """Get available utility types with their configurations"""
+    return [
+        {
+            "type": "electricity",
+            "label": "Elettricità",
+            "unit": "kWh",
+            "icon": "flash",
+            "color": "#FFC107",
+            "defaultCost": 0.22
+        },
+        {
+            "type": "water",
+            "label": "Acqua",
+            "unit": "m³",
+            "icon": "water_drop",
+            "color": "#2196F3",
+            "defaultCost": 2.50
+        },
+        {
+            "type": "gas",
+            "label": "Gas",
+            "unit": "m³",
+            "icon": "local_fire_department",
+            "color": "#FF5722",
+            "defaultCost": 1.20
+        }
+    ]
+
+# BULK operations for multiple readings
+@router.post("/bulk", response_model=List[schemas.UtilityReading])
+def create_bulk_utility_readings(
+    readings: List[schemas.UtilityReadingCreate],
+    db: Session = Depends(get_db)
+):
+    """Create multiple utility readings at once"""
+    created_readings = []
+    
+    for reading_data in readings:
+        # Verify apartment exists
+        apartment = service.get_apartment(db, reading_data.apartmentId)
+        if not apartment:
+            raise HTTPException(status_code=404, detail=f"Apartment {reading_data.apartmentId} not found")
+        
+        # Get last reading for calculation
+        last_reading = service.get_last_utility_reading(db, reading_data.apartmentId, reading_data.type)
+        
+        if last_reading:
+            if reading_data.currentReading < last_reading.currentReading:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Current reading for apartment {reading_data.apartmentId} must be greater than the last reading ({last_reading.currentReading})"
+                )
+            reading_data.previousReading = last_reading.currentReading
+        
+        # Calculate consumption and cost
+        reading_data.consumption = reading_data.currentReading - reading_data.previousReading
+        reading_data.totalCost = reading_data.consumption * reading_data.unitCost
+        
+        # Create the reading
+        created_reading = service.create_utility_reading(db, reading_data)
+        created_readings.append(created_reading)
+    
+    return created_readings
