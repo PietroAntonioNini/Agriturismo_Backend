@@ -27,6 +27,37 @@ def get_utility_readings(
 ):
     return service.get_utility_readings(db, skip, limit, apartmentId, type, year, month, isPaid)
 
+# GET utility type configurations
+@router.get("/types", response_model=List[schemas.UtilityTypeConfig])
+def get_utility_types():
+    """Get available utility types with their configurations"""
+    return [
+        {
+            "type": "electricity",
+            "label": "Elettricità",
+            "unit": "kWh",
+            "icon": "bolt",
+            "color": "#FFC107",
+            "defaultCost": 0.22
+        },
+        {
+            "type": "water",
+            "label": "Acqua",
+            "unit": "m³",
+            "icon": "water_drop",
+            "color": "#2196F3",
+            "defaultCost": 2.50
+        },
+        {
+            "type": "gas",
+            "label": "Gas",
+            "unit": "m³",
+            "icon": "local_fire_department",
+            "color": "#FF5722",
+            "defaultCost": 1.20
+        }
+    ]
+
 # GET utility reading by ID
 @router.get("/{reading_id}", response_model=schemas.UtilityReading)
 def get_utility_reading(reading_id: int, db: Session = Depends(get_db)):
@@ -227,37 +258,6 @@ def get_last_reading_info(
         "lastReadingDate": last_reading.readingDate,
         "hasHistory": True
     }
-
-# GET utility type configurations
-@router.get("/types", response_model=List[schemas.UtilityTypeConfig])
-def get_utility_types():
-    """Get available utility types with their configurations"""
-    return [
-        {
-            "type": "electricity",
-            "label": "Elettricità",
-            "unit": "kWh",
-            "icon": "flash",
-            "color": "#FFC107",
-            "defaultCost": 0.22
-        },
-        {
-            "type": "water",
-            "label": "Acqua",
-            "unit": "m³",
-            "icon": "water_drop",
-            "color": "#2196F3",
-            "defaultCost": 2.50
-        },
-        {
-            "type": "gas",
-            "label": "Gas",
-            "unit": "m³",
-            "icon": "local_fire_department",
-            "color": "#FF5722",
-            "defaultCost": 1.20
-        }
-    ]
 
 # BULK operations for multiple readings
 @router.post("/bulk", response_model=List[schemas.UtilityReading])
