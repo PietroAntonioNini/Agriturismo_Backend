@@ -179,8 +179,8 @@ class Lease(Base):
     __tablename__ = "leases"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenantId = Column(Integer, ForeignKey("tenants.id"))
-    apartmentId = Column(Integer, ForeignKey("apartments.id"))
+    tenantId = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    apartmentId = Column(Integer, ForeignKey("apartments.id"), nullable=False)
     startDate = Column(Date)
     endDate = Column(Date)
     monthlyRent = Column(Float)

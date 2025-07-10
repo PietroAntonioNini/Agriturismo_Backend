@@ -290,38 +290,18 @@ def get_apartment_invoices(
 # ----- Tenant Services -----
 
 def get_tenants(db: Session, skip: int = 0, limit: int = 100):
-    """Ottiene tutti i tenant con query diretta e sorting ottimizzato."""
+    """Ottiene tutti i tenant con query ORM ottimizzata."""
     try:
         # Forza un commit e svuota completamente la cache
         db.commit()
         db.expire_all()
         
-        # Usa una query SQL diretta per evitare problemi di cache
-        from sqlalchemy.sql import text
-        result = db.execute(
-            text("""
-                SELECT * FROM tenants 
-                ORDER BY id DESC
-                LIMIT :limit OFFSET :skip
-            """), 
-            {"limit": limit, "skip": skip}
-        ).fetchall()
-        
-        # Trasforma i risultati in oggetti Tenant
-        tenants = []
-        if result:
-            for row in result:
-                # Crea un dizionario dai risultati
-                tenant_dict = {column: value for column, value in zip(result.keys(), row)}
-                # Crea un oggetto Tenant dal dizionario
-                tenant = models.Tenant(**tenant_dict)
-                tenants.append(tenant)
-        
-        return tenants
+        # Usa query ORM standard che è più affidabile
+        return db.query(models.Tenant).order_by(models.Tenant.id.desc()).offset(skip).limit(limit).all()
     except Exception as e:
         print(f"Errore nella funzione get_tenants: {str(e)}")
-        # In caso di errore, prova il metodo standard come fallback
-        return db.query(models.Tenant).order_by(models.Tenant.id.desc()).offset(skip).limit(limit).all()
+        # In caso di errore, riprova con una query più semplice
+        return db.query(models.Tenant).all()
 
 def get_tenant(db: Session, tenantId: int):
     return db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
