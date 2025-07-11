@@ -34,6 +34,14 @@ def get_tenant(tenantId: int, db: Session = Depends(get_db)):
     tenant = service.get_tenant(db, tenantId=tenantId)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Sincronizza automaticamente i documenti con il filesystem
+    sync_result = service.sync_tenant_documents_with_filesystem(db, tenantId)
+    if sync_result and sync_result["removed_orphaned_documents"]:
+        print(f"Sincronizzati documenti per tenant {tenantId}: rimossi {len(sync_result['removed_orphaned_documents'])} riferimenti orfani")
+        # Ricarica il tenant dopo la sincronizzazione
+        tenant = service.get_tenant(db, tenantId=tenantId)
+    
     return tenant
 
 # POST create tenant
@@ -178,6 +186,13 @@ async def update_tenant_with_images(
             doc_url = await service.save_tenant_document(tenantId, documentBackImage, "back")
             updated_tenant = service.update_tenant_document(db, tenantId, doc_url, "back")
         
+        # Sincronizza automaticamente i documenti con il filesystem dopo l'aggiornamento
+        sync_result = service.sync_tenant_documents_with_filesystem(db, tenantId)
+        if sync_result and sync_result["removed_orphaned_documents"]:
+            print(f"Sincronizzati documenti durante aggiornamento tenant {tenantId}: rimossi {len(sync_result['removed_orphaned_documents'])} riferimenti orfani")
+            # Ricarica il tenant dopo la sincronizzazione
+            updated_tenant = service.get_tenant(db, tenantId)
+        
         return updated_tenant
         
     except Exception as e:
@@ -185,6 +200,60 @@ async def update_tenant_with_images(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore imprevisto: {str(e)}")
+
+# POST sync tenant documents with filesystem
+@router.post("/{tenantId}/sync-documents", response_model=dict)
+def sync_tenant_documents(tenantId: int, db: Session = Depends(get_db)):
+    """Sincronizza i documenti del tenant nel database con quelli fisicamente presenti nel filesystem."""
+    tenant = service.get_tenant(db, tenantId)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    sync_result = service.sync_tenant_documents_with_filesystem(db, tenantId)
+    
+    if sync_result is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    return {
+        "message": "Sincronizzazione completata",
+        "orphaned_documents_removed": sync_result["removed_orphaned_documents"],
+        "updated_fields": sync_result["updated_fields"],
+        "current_front_image": sync_result["current_front_image"],
+        "current_back_image": sync_result["current_back_image"],
+        "removed_count": len(sync_result["removed_orphaned_documents"])
+    }
+
+# POST sync all tenants documents with filesystem
+@router.post("/sync-all-documents", response_model=dict)
+def sync_all_tenants_documents(db: Session = Depends(get_db)):
+    """Sincronizza i documenti di tutti i tenant nel database con quelli fisicamente presenti nel filesystem."""
+    tenants = service.get_tenants(db, skip=0, limit=1000)  # Prendi tutti i tenant
+    
+    total_orphaned_removed = 0
+    processed_tenants = 0
+    sync_results = []
+    
+    for tenant in tenants:
+        sync_result = service.sync_tenant_documents_with_filesystem(db, tenant.id)
+        if sync_result:
+            orphaned_count = len(sync_result["removed_orphaned_documents"])
+            if orphaned_count > 0:
+                sync_results.append({
+                    "tenant_id": tenant.id,
+                    "tenant_name": f"{tenant.firstName} {tenant.lastName}",
+                    "orphaned_documents_removed": sync_result["removed_orphaned_documents"],
+                    "updated_fields": sync_result["updated_fields"],
+                    "removed_count": orphaned_count
+                })
+                total_orphaned_removed += orphaned_count
+            processed_tenants += 1
+    
+    return {
+        "message": "Sincronizzazione completata per tutti i tenant",
+        "processed_tenants": processed_tenants,
+        "total_orphaned_documents_removed": total_orphaned_removed,
+        "detailed_results": sync_results
+    }
 
 # GET download tenant document
 @router.get("/{tenantId}/documents/download/{doc_type}", response_class=FileResponse)

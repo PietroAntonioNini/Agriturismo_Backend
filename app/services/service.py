@@ -1080,3 +1080,66 @@ def sync_apartment_images_with_filesystem(db: Session, apartmentId: int):
         "removed_orphaned_images": [],
         "current_images": db_images
     }
+
+def sync_tenant_documents_with_filesystem(db: Session, tenantId: int):
+    """Sincronizza i documenti del tenant nel database con quelli fisicamente presenti nel filesystem."""
+    db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
+    if not db_tenant:
+        return None
+    
+    # Percorso della cartella dei documenti
+    documents_dir = f"static/tenants/{tenantId}/documents"
+    
+    # Ottieni i documenti dal database
+    front_image = db_tenant.documentFrontImage
+    back_image = db_tenant.documentBackImage
+    
+    # Lista per tracciare i documenti orfani
+    orphaned_documents = []
+    updated_fields = {}
+    
+    # Verifica l'esistenza dell'immagine fronte
+    if front_image:
+        # Rimuovi eventuali parametri di query dall'URL
+        clean_front_url = front_image.split('?')[0]
+        front_file_path = f"static{clean_front_url}"
+        
+        if not os.path.exists(front_file_path) or not os.path.isfile(front_file_path):
+            orphaned_documents.append(f"front: {front_image}")
+            updated_fields["documentFrontImage"] = None
+    
+    # Verifica l'esistenza dell'immagine retro
+    if back_image:
+        # Rimuovi eventuali parametri di query dall'URL
+        clean_back_url = back_image.split('?')[0]
+        back_file_path = f"static{clean_back_url}"
+        
+        if not os.path.exists(back_file_path) or not os.path.isfile(back_file_path):
+            orphaned_documents.append(f"back: {back_image}")
+            updated_fields["documentBackImage"] = None
+    
+    # Aggiorna il database se ci sono documenti orfani
+    if orphaned_documents:
+        print(f"Rimuovendo {len(orphaned_documents)} documenti orfani per il tenant {tenantId}: {orphaned_documents}")
+        
+        # Applica gli aggiornamenti al database
+        for field, value in updated_fields.items():
+            setattr(db_tenant, field, value)
+        
+        setattr(db_tenant, "updatedAt", datetime.utcnow())
+        db.commit()
+        db.refresh(db_tenant)
+        
+        return {
+            "removed_orphaned_documents": orphaned_documents,
+            "updated_fields": updated_fields,
+            "current_front_image": db_tenant.documentFrontImage,
+            "current_back_image": db_tenant.documentBackImage
+        }
+    
+    return {
+        "removed_orphaned_documents": [],
+        "updated_fields": {},
+        "current_front_image": front_image,
+        "current_back_image": back_image
+    }
