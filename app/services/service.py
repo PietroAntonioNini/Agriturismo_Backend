@@ -140,7 +140,7 @@ def add_apartment_image(db: Session, apartmentId: int, imageUrl: str):
         if current_images is None:
             current_images = [imageUrl]
         else:
-            current_images = [imageUrl]
+            current_images.append(imageUrl)
 
         setattr(db_apartment, "images", current_images)
         setattr(db_apartment, "updatedAt", datetime.utcnow())
@@ -1036,4 +1036,47 @@ def get_utility_statistics_overview(db: Session, year: Optional[int] = None):
         "totalCosts": total_costs,
         "averageConsumption": average_consumption,
         "monthlyTrend": list(monthly_trend.values())
+    }
+
+def sync_apartment_images_with_filesystem(db: Session, apartmentId: int):
+    """Sincronizza le immagini dell'appartamento nel database con quelle fisicamente presenti nel filesystem."""
+    db_apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+    if not db_apartment:
+        return None
+    
+    # Percorso della cartella delle immagini
+    images_dir = f"static/apartments/{apartmentId}"
+    
+    # Ottieni le immagini dal database
+    db_images = db_apartment.images or []
+    
+    # Ottieni le immagini fisicamente presenti nel filesystem
+    existing_files = []
+    if os.path.exists(images_dir) and os.path.isdir(images_dir):
+        for filename in os.listdir(images_dir):
+            file_path = os.path.join(images_dir, filename)
+            if os.path.isfile(file_path):
+                existing_files.append(f"/apartments/{apartmentId}/{filename}")
+    
+    # Trova le immagini che sono nel database ma non nel filesystem
+    orphaned_images = [img for img in db_images if img not in existing_files]
+    
+    # Rimuovi le immagini orfane dal database
+    if orphaned_images:
+        print(f"Rimuovendo {len(orphaned_images)} immagini orfane per l'appartamento {apartmentId}: {orphaned_images}")
+        updated_images = [img for img in db_images if img in existing_files]
+        
+        setattr(db_apartment, "images", updated_images)
+        setattr(db_apartment, "updatedAt", datetime.utcnow())
+        db.commit()
+        db.refresh(db_apartment)
+        
+        return {
+            "removed_orphaned_images": orphaned_images,
+            "current_images": updated_images
+        }
+    
+    return {
+        "removed_orphaned_images": [],
+        "current_images": db_images
     }

@@ -41,6 +41,14 @@ def get_apartment(apartmentId: int, db: Session = Depends(get_db)):
     apartment = service.get_apartment(db, apartmentId)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    # Sincronizza automaticamente le immagini con il filesystem
+    sync_result = service.sync_apartment_images_with_filesystem(db, apartmentId)
+    if sync_result and sync_result["removed_orphaned_images"]:
+        print(f"Sincronizzate immagini per appartamento {apartmentId}: rimossi {len(sync_result['removed_orphaned_images'])} riferimenti orfani")
+        # Ricarica l'appartamento dopo la sincronizzazione
+        apartment = service.get_apartment(db, apartmentId)
+    
     return apartment
 
 # POST create apartment
@@ -104,6 +112,13 @@ async def update_apartment_with_images(
         image_urls = await service.save_apartment_images(apartmentId, files)
         # Merge with existing images or replace them
         updated_apartment = service.update_apartment_images(db, apartmentId, image_urls, append=True)
+    
+    # Sincronizza automaticamente le immagini con il filesystem dopo l'aggiornamento
+    sync_result = service.sync_apartment_images_with_filesystem(db, apartmentId)
+    if sync_result and sync_result["removed_orphaned_images"]:
+        print(f"Sincronizzate immagini durante aggiornamento appartamento {apartmentId}: rimossi {len(sync_result['removed_orphaned_images'])} riferimenti orfani")
+        # Ricarica l'appartamento dopo la sincronizzazione
+        updated_apartment = service.get_apartment(db, apartmentId)
     
     return updated_apartment
 
@@ -246,6 +261,57 @@ def delete_apartment_image(
         raise HTTPException(status_code=404, detail="Image not found")
     
     return {"detail": "Image deleted successfully"}
+
+# POST sync apartment images with filesystem
+@router.post("/{apartmentId}/sync-images", response_model=dict)
+def sync_apartment_images(apartmentId: int, db: Session = Depends(get_db)):
+    """Sincronizza le immagini dell'appartamento nel database con quelle fisicamente presenti nel filesystem."""
+    apartment = service.get_apartment(db, apartmentId)
+    if apartment is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    sync_result = service.sync_apartment_images_with_filesystem(db, apartmentId)
+    
+    if sync_result is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    return {
+        "message": "Sincronizzazione completata",
+        "orphaned_images_removed": sync_result["removed_orphaned_images"],
+        "current_images": sync_result["current_images"],
+        "removed_count": len(sync_result["removed_orphaned_images"])
+    }
+
+# POST sync all apartments images with filesystem
+@router.post("/sync-all-images", response_model=dict)
+def sync_all_apartments_images(db: Session = Depends(get_db)):
+    """Sincronizza le immagini di tutti gli appartamenti nel database con quelle fisicamente presenti nel filesystem."""
+    apartments = service.get_apartments(db, skip=0, limit=1000)  # Prendi tutti gli appartamenti
+    
+    total_orphaned_removed = 0
+    processed_apartments = 0
+    sync_results = []
+    
+    for apartment in apartments:
+        sync_result = service.sync_apartment_images_with_filesystem(db, apartment.id)
+        if sync_result:
+            orphaned_count = len(sync_result["removed_orphaned_images"])
+            if orphaned_count > 0:
+                sync_results.append({
+                    "apartment_id": apartment.id,
+                    "apartment_name": apartment.name,
+                    "orphaned_images_removed": sync_result["removed_orphaned_images"],
+                    "removed_count": orphaned_count
+                })
+                total_orphaned_removed += orphaned_count
+            processed_apartments += 1
+    
+    return {
+        "message": "Sincronizzazione completata per tutti gli appartamenti",
+        "processed_apartments": processed_apartments,
+        "total_orphaned_images_removed": total_orphaned_removed,
+        "detailed_results": sync_results
+    }
 
 # GET available apartments
 @router.get("/available/list", response_model=List[schemas.Apartment])
