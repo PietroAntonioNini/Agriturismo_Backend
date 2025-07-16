@@ -19,12 +19,12 @@ router = APIRouter(
 def get_leases(
     skip: int = 0, 
     limit: int = 100,
-    isActive: Optional[bool] = None,
+    status: Optional[str] = None,
     tenantId: Optional[int] = None,
     apartmentId: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    return service.get_leases(db, skip, limit, isActive, tenantId, apartmentId)
+    return service.get_leases(db, skip, limit, status, tenantId, apartmentId)
 
 # GET lease by ID
 @router.get("/{leaseId}", response_model=schemas.Lease)
@@ -125,18 +125,12 @@ def terminate_lease(
     
     # Aggiorna il contratto
     existing_lease.endDate = endDate
-    existing_lease.isActive = False
     existing_lease.notes = termination_data.get("notes", existing_lease.notes)
     existing_lease.updatedAt = datetime.utcnow()
     db.commit()
     db.refresh(existing_lease)
     
     return existing_lease
-
-# GET active leases
-@router.get("/active/list", response_model=List[schemas.Lease])
-def get_active_leases(db: Session = Depends(get_db)):
-    return service.get_leases(db, isActive=True)
 
 # GET leases expiring soon
 @router.get("/expiring-soon/list", response_model=List[schemas.Lease])

@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 import time
-from datetime import datetime
+from datetime import datetime, date
 
 from app.database import Base
 
@@ -185,7 +185,6 @@ class Lease(Base):
     endDate = Column(Date)
     monthlyRent = Column(Float)
     securityDeposit = Column(Float)
-    isActive = Column(Boolean, default=True)
     paymentDueDay = Column(Integer)
     termsAndConditions = Column(Text)
     specialClauses = Column(Text, nullable=True)
@@ -199,6 +198,16 @@ class Lease(Base):
     documents = relationship("LeaseDocument", back_populates="lease")
     payments = relationship("LeasePayment", back_populates="lease")
     invoices = relationship("Invoice", back_populates="lease")
+    
+    @property
+    def isActive(self):
+        """Determina se il contratto è attivo. È attivo fino alle 23:59 del giorno precedente alla data di fine."""
+        return date.today() < self.endDate if self.endDate else True
+
+    @property
+    def status(self):
+        """Restituisce lo stato del contratto come stringa ('active' o 'terminated')."""
+        return "active" if self.isActive else "terminated"
 
 class LeaseDocument(Base):
     __tablename__ = "lease_documents"

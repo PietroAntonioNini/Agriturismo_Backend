@@ -186,13 +186,18 @@ def get_available_apartments(db: Session):
 def get_apartment_tenants(db: Session, apartmentId: int):
     """Get all tenants associated with an apartment through active leases."""
     # Query tenants through leases
-    tenants = db.query(models.Tenant).join(
-        models.Lease, 
-        models.Tenant.id == models.Lease.tenantId
-    ).filter(
-        models.Lease.apartmentId == apartmentId,
-        models.Lease.isActive == True
+    leases = db.query(models.Lease).filter(
+        models.Lease.apartmentId == apartmentId
     ).all()
+    
+    # Filter for active leases in Python
+    active_leases = [lease for lease in leases if lease.isActive]
+    
+    # Get unique tenant IDs
+    tenant_ids = {lease.tenantId for lease in active_leases}
+    
+    # Query tenants
+    tenants = db.query(models.Tenant).filter(models.Tenant.id.in_(tenant_ids)).all()
     
     return tenants
 
@@ -256,10 +261,12 @@ def get_apartment_leases(
         models.Lease.apartmentId == apartmentId
     )
     
-    if isActive is not None:
-        query = query.filter(models.Lease.isActive == isActive)
+    leases = query.order_by(models.Lease.startDate.desc()).all()
     
-    return query.order_by(models.Lease.startDate.desc()).all()
+    if isActive is not None:
+        leases = [lease for lease in leases if lease.isActive == isActive]
+        
+    return leases
 
 def get_apartment_invoices(
     db: Session, 
@@ -524,10 +531,12 @@ def get_tenant_leases(db: Session, tenantId: int, isActive: Optional[bool] = Non
         models.Lease.tenantId == tenantId
     )
     
-    if isActive is not None:
-        query = query.filter(models.Lease.isActive == isActive)
+    leases = query.order_by(models.Lease.startDate.desc()).all()
     
-    return query.order_by(models.Lease.startDate.desc()).all()
+    if isActive is not None:
+        leases = [lease for lease in leases if lease.isActive == isActive]
+        
+    return leases
 
 def get_tenant_invoices(
     db: Session, 
@@ -582,15 +591,12 @@ def get_leases(
     db: Session, 
     skip: int = 0, 
     limit: int = 100,
-    isActive: Optional[bool] = None,
+    status: Optional[str] = None,
     tenantId: Optional[int] = None,
     apartmentId: Optional[int] = None
 ):
     """Get leases with optional filters."""
     query = db.query(models.Lease)
-    
-    if isActive is not None:
-        query = query.filter(models.Lease.isActive == isActive)
     
     if tenantId is not None:
         query = query.filter(models.Lease.tenantId == tenantId)
@@ -598,7 +604,12 @@ def get_leases(
     if apartmentId is not None:
         query = query.filter(models.Lease.apartmentId == apartmentId)
     
-    return query.offset(skip).limit(limit).all()
+    all_leases = query.offset(skip).limit(limit).all()
+    
+    if status is not None:
+        all_leases = [lease for lease in all_leases if lease.status == status]
+        
+    return all_leases
 
 def get_lease(db: Session, leaseId: int):
     """Get a specific lease by ID."""
@@ -638,11 +649,16 @@ def get_expiring_leases(db: Session, days_threshold: int = 30):
     today = datetime.utcnow().date()
     expiry_date = today + timedelta(days=days_threshold)
     
-    return db.query(models.Lease).filter(
-        models.Lease.isActive == True,
+    # Fetch all potentially relevant leases from the DB
+    leases = db.query(models.Lease).filter(
         models.Lease.endDate <= expiry_date,
         models.Lease.endDate >= today
     ).order_by(models.Lease.endDate).all()
+    
+    # Filter for active leases in Python
+    active_expiring_leases = [lease for lease in leases if lease.isActive]
+    
+    return active_expiring_leases
 
 async def save_lease_document(leaseId: int, file: UploadFile):
     """Save a lease document file and return the URL."""

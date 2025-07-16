@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date
-from pydantic import BaseModel, EmailStr, validator, Field
+from pydantic import BaseModel, EmailStr, validator, Field, field_validator
 
 # Base model that converts camelCase to snake_case and vice versa
 class CamelCaseModel(BaseModel):
@@ -176,11 +176,23 @@ class LeaseBase(CamelCaseModel):
     endDate: date
     monthlyRent: float
     securityDeposit: float
-    isActive: bool = True
     paymentDueDay: int
     termsAndConditions: str
     specialClauses: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator('startDate', 'endDate', mode='before')
+    @classmethod
+    def parse_date(cls, value):
+        if isinstance(value, str):
+            # Handles ISO format datetime strings like "2023-01-01T00:00:00.000Z"
+            # by parsing them and taking only the date part.
+            if 'T' in value:
+                return datetime.fromisoformat(value.replace('Z', '+00:00')).date()
+        if isinstance(value, datetime):
+            return value.date()
+        # For values that are already date objects or 'YYYY-MM-DD' strings, Pydantic will handle them.
+        return value
 
 class LeaseCreate(LeaseBase):
     pass
@@ -191,6 +203,11 @@ class Lease(LeaseBase):
     updatedAt: datetime
     documents: Optional[List[LeaseDocument]] = []
     payments: Optional[List[LeasePayment]] = []
+    isActive: bool
+    status: str
+
+    class Config:
+        orm_mode = True
 
 # ------------------ SCHEMA INVOICE ITEM ------------------
 class InvoiceItemBase(CamelCaseModel):
