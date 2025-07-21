@@ -1,0 +1,26 @@
+name: agriturismo-backend
+services:
+  - name: backend
+    type: web
+    source:
+      type: git
+      repository: your-github-username/Agriturismo_Backend
+      branch: main
+    dockerfile: Dockerfile
+    ports:
+      - port: 8000
+        protocol: http
+    env:
+      - name: DATABASE_URL
+        value: ${{ secrets.DATABASE_URL }}
+      - name: SECRET_KEY
+        value: ${{ secrets.SECRET_KEY }}
+      - name: CORS_ORIGINS
+        value: ${{ secrets.CORS_ORIGINS }}
+      - name: ENABLE_SSL_REDIRECT
+        value: "True"
+    regions:
+      - fra
+    scaling:
+      min: 1
+      max: 1 
