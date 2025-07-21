@@ -48,6 +48,7 @@ app = FastAPI(
     },
     docs_url=None,  # Disabilitiamo la documentazione standard per personalizzarla
     redoc_url="/redoc",
+    redirect_slashes=False,  # Disabilita redirect automatico per trailing slash
 )
 
 # Configurazione rate limiting
