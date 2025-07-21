@@ -193,7 +193,11 @@ async def https_redirect_middleware(request: Request, call_next):
         return await call_next(request)
     
     # Controlla se è una richiesta API (non reindirizzare le API)
-    if request.url.path.startswith("/api/") or request.url.path.startswith("/auth/"):
+    api_paths = [
+        "/api/", "/auth/", "/apartments/", "/tenants/",
+        "/leases/", "/utilities/", "/users/", "/health"
+    ]
+    if any(request.url.path.startswith(path) for path in api_paths):
         return await call_next(request)
     
     # Reindirizza a HTTPS solo per le pagine web
