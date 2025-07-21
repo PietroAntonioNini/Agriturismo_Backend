@@ -282,3 +282,16 @@ async def root():
 async def health_check():
     """Endpoint per verificare che l'API sia attiva e funzionante"""
     return {"status": "healthy", "version": app.version}
+
+@app.get("/debug/routes")
+async def debug_routes():
+    """Endpoint per debug - mostra tutti gli endpoint disponibili"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": route.name
+            })
+    return {"routes": routes, "total": len(routes)}
