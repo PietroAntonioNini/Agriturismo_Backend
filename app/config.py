@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     rate_limit_register: str = os.getenv("RATE_LIMIT_REGISTER", "3/minute")
     rate_limit_default: str = os.getenv("RATE_LIMIT_DEFAULT", "60/minute")
     # Configurazioni CORS per l'integrazione con il frontend
-    cors_origins: list = os.getenv("CORS_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4000,http://127.0.0.1:4000").replace("[", "").replace("]", "").replace("\"", "").split(",")
+    cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4000,http://127.0.0.1:4000")
+    
+    @property
+    def cors_origins_list(self) -> list:
+        """Converte la stringa CORS_ORIGINS in una lista"""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
     # Configurazioni per l'upload dei file
     max_upload_size: int = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB di default
     allowed_upload_extensions: list = os.getenv("ALLOWED_UPLOAD_EXTENSIONS", ".jpg,.jpeg,.png,.pdf,.doc,.docx").split(",")

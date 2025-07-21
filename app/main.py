@@ -199,7 +199,7 @@ async def https_redirect_middleware(request: Request, call_next):
 # Configurazione avanzata di CORS per supportare le richieste autenticate dal frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -207,7 +207,7 @@ app.add_middleware(
     max_age=600,  # 10 minuti di cache per le preflight request
 )
 
-logger.info(f"CORS configurato per domini: {settings.cors_origins}")
+logger.info(f"CORS configurato per domini: {settings.cors_origins_list}")
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
