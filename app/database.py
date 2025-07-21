@@ -57,7 +57,7 @@ engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
     # Il parametro isolation_level va FUORI da connect_args
-    isolation_level="READ COMMITTED",
+    isolation_level="READ COMMITTED" if "postgresql" in settings.database_url else "SERIALIZABLE",
     pool_pre_ping=True,
     pool_recycle=3600
 )
