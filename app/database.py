@@ -40,8 +40,15 @@ def create_database_if_not_exists(url):
     finally:
         temp_engine.dispose()
 
+# Normalizza l'URL del database per SQLAlchemy
+def normalize_database_url(url: str) -> str:
+    """Converte postgres:// in postgresql:// per compatibilità SQLAlchemy"""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
 # Create database if not exists (only if using postgres)
-if "postgresql" in settings.database_url:
+if "postgres" in settings.database_url:
     try:
         create_database_if_not_exists(settings.database_url)
     except Exception as e:
@@ -53,11 +60,12 @@ else:
 
 
 # Create the main database engine for the application using the URL from settings
+normalized_url = normalize_database_url(settings.database_url)
 engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    normalized_url,
+    connect_args={"check_same_thread": False} if "sqlite" in normalized_url else {},
     # Il parametro isolation_level va FUORI da connect_args
-    isolation_level="READ COMMITTED" if "postgresql" in settings.database_url else "SERIALIZABLE",
+    isolation_level="READ COMMITTED" if "postgresql" in normalized_url else "SERIALIZABLE",
     pool_pre_ping=True,
     pool_recycle=3600
 )
