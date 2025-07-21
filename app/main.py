@@ -192,7 +192,11 @@ async def https_redirect_middleware(request: Request, call_next):
     if forwarded_proto == "https":
         return await call_next(request)
     
-    # Reindirizza a HTTPS
+    # Controlla se è una richiesta API (non reindirizzare le API)
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/auth/"):
+        return await call_next(request)
+    
+    # Reindirizza a HTTPS solo per le pagine web
     https_url = str(request.url).replace("http://", "https://", 1)
     return RedirectResponse(https_url, status_code=status.HTTP_301_MOVED_PERMANENTLY)
 
