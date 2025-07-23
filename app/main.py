@@ -70,7 +70,8 @@ async def cache_middleware(request: Request, call_next):
     if "/auth/" in request.url.path or "/users/" in request.url.path:
         return await call_next(request)
     
-    # Ignora caching se l'utente è autenticato (header Authorization presente)
+    # DISABILITA COMPLETAMENTE LA CACHE PER RICHIESTE AUTENTICATE
+    # Questo risolve il problema di sincronizzazione tra frontend e backend
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.lower().startswith("bearer "):
         return await call_next(request)
@@ -132,6 +133,62 @@ async def cache_middleware(request: Request, call_next):
     
     return response
 
+# Middleware per invalidare la cache quando vengono fatte modifiche
+@app.middleware("http")
+async def cache_invalidation_middleware(request: Request, call_next):
+    # Esegue la richiesta originale
+    response = await call_next(request)
+    
+    # Se la richiesta è stata completata con successo (2xx) e è una modifica
+    if 200 <= response.status_code < 300 and request.method in ["PUT", "POST", "DELETE", "PATCH"]:
+        # Invalida la cache per le risorse modificate
+        if hasattr(app.state, "cache") and app.state.cache:
+            path = request.url.path
+            
+            # Lista delle chiavi da invalidare
+            keys_to_remove = []
+            
+            # Invalida cache per tenant
+            if "/tenants/" in path:
+                # Invalida tutte le cache relative ai tenant
+                for cache_key in app.state.cache.keys():
+                    if "GET:/tenants/" in cache_key:
+                        keys_to_remove.append(cache_key)
+                        logger.debug(f"Invalidando cache per tenant: {cache_key}")
+            
+            # Invalida cache per appartamenti
+            elif "/apartments/" in path:
+                # Invalida tutte le cache relative agli appartamenti
+                for cache_key in app.state.cache.keys():
+                    if "GET:/apartments/" in cache_key:
+                        keys_to_remove.append(cache_key)
+                        logger.debug(f"Invalidando cache per appartamento: {cache_key}")
+            
+            # Invalida cache per contratti
+            elif "/leases/" in path:
+                # Invalida tutte le cache relative ai contratti
+                for cache_key in app.state.cache.keys():
+                    if "GET:/leases/" in cache_key:
+                        keys_to_remove.append(cache_key)
+                        logger.debug(f"Invalidando cache per contratto: {cache_key}")
+            
+            # Invalida cache per utilities
+            elif "/utilities/" in path:
+                # Invalida tutte le cache relative alle utilities
+                for cache_key in app.state.cache.keys():
+                    if "GET:/utilities/" in cache_key:
+                        keys_to_remove.append(cache_key)
+                        logger.debug(f"Invalidando cache per utility: {cache_key}")
+            
+            # Rimuovi le chiavi dalla cache
+            for key in keys_to_remove:
+                app.state.cache.pop(key, None)
+            
+            if keys_to_remove:
+                logger.info(f"Invalidate {len(keys_to_remove)} chiavi di cache per {path}")
+    
+    return response
+
 # Middleware per logging performance
 @app.middleware("http")
 async def performance_middleware(request: Request, call_next):
@@ -157,23 +214,20 @@ async def security_headers_middleware(request: Request, call_next):
     # Strict-Transport-Security: indica al browser di usare sempre HTTPS
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
-    # Content-Security-Policy: previene XSS e altri attacchi di code injection
-    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'self'"
+    # Cache-Control: previene il caching lato browser per le API
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/tenants/") or request.url.path.startswith("/apartments/") or request.url.path.startswith("/leases/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     
-    # X-Content-Type-Options: previene lo sniffing MIME
+    # X-Content-Type-Options: previene MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
     
     # X-Frame-Options: previene clickjacking
     response.headers["X-Frame-Options"] = "DENY"
     
-    # X-XSS-Protection: protezione XSS per browser più vecchi
+    # X-XSS-Protection: abilita protezione XSS nel browser
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    
-    # Referrer-Policy: limita le informazioni passate in header referer
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
-    # Permissions-Policy: controlla quali API browser possono essere usate
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     
     return response
 
@@ -203,7 +257,7 @@ async def https_redirect_middleware(request: Request, call_next):
     
     # Reindirizza a HTTPS solo per le pagine web
     https_url = str(request.url).replace("http://", "https://", 1)
-    return RedirectResponse(https_url, status_code=status.HTTP_301_MOVED_PERMANENTLY)
+    return RedirectResponse(https_url, status_code=HTTP_429_TOO_MANY_REQUESTS)
 
 # Configurazione avanzata di CORS per supportare le richieste autenticate dal frontend
 app.add_middleware(
@@ -285,13 +339,44 @@ async def health_check():
 
 @app.get("/debug/routes")
 async def debug_routes():
-    """Endpoint per debug - mostra tutti gli endpoint disponibili"""
+    """Endpoint per il debug che mostra tutti gli endpoint disponibili dell'API."""
     routes = []
     for route in app.routes:
-        if hasattr(route, "path") and hasattr(route, "methods"):
+        if hasattr(route, "methods") and hasattr(route, "path"):
             routes.append({
                 "path": route.path,
                 "methods": list(route.methods),
-                "name": route.name
+                "name": getattr(route, "name", "N/A")
             })
-    return {"routes": routes, "total": len(routes)}
+    return {"routes": routes}
+
+@app.post("/debug/clear-cache")
+async def clear_cache():
+    """Endpoint per pulire manualmente la cache."""
+    if hasattr(app.state, "cache"):
+        cache_size = len(app.state.cache)
+        app.state.cache.clear()
+        logger.info(f"Cache pulita manualmente. Rimossi {cache_size} elementi.")
+        return {"message": f"Cache pulita. Rimossi {cache_size} elementi."}
+    else:
+        return {"message": "Nessuna cache da pulire."}
+
+@app.get("/debug/cache-stats")
+async def cache_stats():
+    """Endpoint per visualizzare le statistiche della cache."""
+    if hasattr(app.state, "cache"):
+        cache_size = len(app.state.cache)
+        cache_keys = list(app.state.cache.keys())
+        return {
+            "cache_enabled": settings.cache_enabled,
+            "cache_size": cache_size,
+            "cache_expire_seconds": settings.cache_expire_seconds,
+            "cache_keys": cache_keys
+        }
+    else:
+        return {
+            "cache_enabled": settings.cache_enabled,
+            "cache_size": 0,
+            "cache_expire_seconds": settings.cache_expire_seconds,
+            "cache_keys": []
+        }
