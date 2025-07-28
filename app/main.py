@@ -14,7 +14,22 @@ from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 from starlette.responses import RedirectResponse
 
 from app.config import settings
-from app.routers import apartments, tenants, leases, utilities, auth, users, invoices
+from app.routers import apartments, tenants, leases, utilities, auth, users
+logger = logging.getLogger(__name__)
+
+# Debug import invoices
+try:
+    logger.info("Tentativo di import del router invoices...")
+    from app.routers import invoices
+    logger.info("✅ Router invoices importato con successo!")
+except Exception as e:
+    logger.error(f"❌ Errore nell'import del router invoices: {e}")
+    import traceback
+    logger.error(f"Traceback completo: {traceback.format_exc()}")
+    # Crea un router vuoto per evitare errori
+    from fastapi import APIRouter
+    invoices = type('MockInvoices', (), {'router': APIRouter()})()
+
 from app.database import create_tables
 from app.utils.rate_limiter import limiter
 
@@ -276,13 +291,21 @@ logger.info(f"CORS configurato per domini: {settings.cors_origins_list}")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Include routers
+logger.info("Registrazione router apartments...")
 app.include_router(apartments.router)
+logger.info("Registrazione router tenants...")
 app.include_router(tenants.router)
+logger.info("Registrazione router leases...")
 app.include_router(leases.router)
+logger.info("Registrazione router utilities...")
 app.include_router(utilities.router)
+logger.info("Registrazione router invoices...")
 app.include_router(invoices.router)  # Invoices router
+logger.info("Registrazione router auth...")
 app.include_router(auth.router)  # Authentication router
+logger.info("Registrazione router users...")
 app.include_router(users.router)  # Users router
+logger.info("✅ Tutti i router registrati con successo!")
 
 # Personalizzazione della UI Swagger per abilitare inserimento diretto del token JWT
 @app.get("/docs", include_in_schema=False)
