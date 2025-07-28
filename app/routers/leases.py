@@ -222,3 +222,17 @@ def search_leases(
     db: Session = Depends(get_db)
 ):
     return service.search_leases(db, q)
+
+# GET lease's invoices
+@router.get("/{leaseId}/invoices", response_model=List[schemas.Invoice])
+def get_lease_invoices(
+    leaseId: int,
+    isPaid: Optional[bool] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    lease = service.get_lease(db, leaseId)
+    if lease is None:
+        raise HTTPException(status_code=404, detail="Lease not found")
+    return service.get_lease_invoices(db, leaseId, isPaid, year, month)

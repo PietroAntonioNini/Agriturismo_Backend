@@ -52,6 +52,41 @@ class Settings(BaseSettings):
     password_reset_token_expire_hours: int = int(os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_HOURS", "24"))
     # Configurazioni per rate limiting specifici per reset password
     rate_limit_forgot_password: str = os.getenv("RATE_LIMIT_FORGOT_PASSWORD", "3/hour")
+    
+    # Configurazioni per il sistema di fatturazione
+    invoice_prefix: str = os.getenv("INVOICE_PREFIX", "INV")
+    invoice_start_number: int = int(os.getenv("INVOICE_START_NUMBER", "1"))
+    default_tax_rate: float = float(os.getenv("DEFAULT_TAX_RATE", "22.00"))
+    default_due_days: int = int(os.getenv("DEFAULT_DUE_DAYS", "30"))
+    default_payment_method: str = os.getenv("DEFAULT_PAYMENT_METHOD", "bank_transfer")
+    
+    # Configurazioni aziendali per fatture
+    company_name: str = os.getenv("COMPANY_NAME", "Agriturismo Manager")
+    company_address: str = os.getenv("COMPANY_ADDRESS", "Via delle Rose, 123")
+    company_city: str = os.getenv("COMPANY_CITY", "12345 Città, Italia")
+    company_phone: str = os.getenv("COMPANY_PHONE", "+39 123 456 7890")
+    company_email: str = os.getenv("COMPANY_EMAIL", "info@agriturismo.it")
+    company_iban: str = os.getenv("COMPANY_IBAN", "IT60 X054 2811 1010 0000 0123 456")
+    company_vat_number: str = os.getenv("COMPANY_VAT_NUMBER", "12345678901")
+    company_logo_url: str = os.getenv("COMPANY_LOGO_URL", "https://example.com/logo.png")
+    
+    # Configurazioni costi utility
+    electricity_cost_per_kwh: float = float(os.getenv("ELECTRICITY_COST_PER_KWH", "0.25"))
+    water_cost_per_m3: float = float(os.getenv("WATER_COST_PER_M3", "1.50"))
+    gas_cost_per_m3: float = float(os.getenv("GAS_COST_PER_M3", "0.80"))
+    
+    # Configurazioni notifiche
+    default_reminder_days: int = int(os.getenv("DEFAULT_REMINDER_DAYS", "7"))
+    overdue_reminder_days: int = int(os.getenv("OVERDUE_REMINDER_DAYS", "3"))
+    auto_send_reminders: bool = os.getenv("AUTO_SEND_REMINDERS", "True").lower() == "true"
+    whatsapp_notifications_enabled: bool = os.getenv("WHATSAPP_NOTIFICATIONS_ENABLED", "True").lower() == "true"
+    email_notifications_enabled: bool = os.getenv("EMAIL_NOTIFICATIONS_ENABLED", "True").lower() == "true"
+    
+    # Configurazioni PDF
+    pdf_storage_path: str = os.getenv("PDF_STORAGE_PATH", "/storage/invoices")
+    pdf_template_path: str = os.getenv("PDF_TEMPLATE_PATH", "/resources/templates/invoice")
+    include_qr_code: bool = os.getenv("INCLUDE_QR_CODE", "True").lower() == "true"
+    include_payment_instructions: bool = os.getenv("INCLUDE_PAYMENT_INSTRUCTIONS", "True").lower() == "true"
 
 settings = Settings()
 

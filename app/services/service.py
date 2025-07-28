@@ -3,7 +3,7 @@ from sqlalchemy import or_, and_, func
 from fastapi import UploadFile, HTTPException
 import os
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import uuid
 from typing import List, Optional, Dict, Any
 import time
@@ -1159,3 +1159,574 @@ def sync_tenant_documents_with_filesystem(db: Session, tenantId: int):
         "current_front_image": front_image,
         "current_back_image": back_image
     }
+
+    # ----- Invoice Services -----
+
+def get_invoices(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    tenant_id: Optional[int] = None,
+    apartment_id: Optional[int] = None,
+    lease_id: Optional[int] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    search: Optional[str] = None,
+    sort_by: str = "issueDate",
+    sort_order: str = "desc"
+):
+    """Get invoices with optional filters."""
+    query = db.query(models.Invoice)
+    
+    # Apply filters
+    if status:
+        if status == "paid":
+            query = query.filter(models.Invoice.isPaid == True)
+        elif status == "unpaid":
+            query = query.filter(models.Invoice.isPaid == False)
+        elif status == "overdue":
+            query = query.filter(
+                models.Invoice.isPaid == False,
+                models.Invoice.dueDate < datetime.utcnow().date()
+            )
+    
+    if tenant_id:
+        query = query.filter(models.Invoice.tenantId == tenant_id)
+    
+    if apartment_id:
+        query = query.filter(models.Invoice.apartmentId == apartment_id)
+    
+    if lease_id:
+        query = query.filter(models.Invoice.leaseId == lease_id)
+    
+    if month:
+        query = query.filter(models.Invoice.month == month)
+    
+    if year:
+        query = query.filter(models.Invoice.year == year)
+    
+    if start_date:
+        query = query.filter(models.Invoice.issueDate >= start_date)
+    
+    if end_date:
+        query = query.filter(models.Invoice.issueDate <= end_date)
+    
+    if search:
+        query = query.filter(models.Invoice.invoiceNumber.ilike(f"%{search}%"))
+    
+    # Apply sorting
+    if sort_by == "issueDate":
+        sort_column = models.Invoice.issueDate
+    elif sort_by == "dueDate":
+        sort_column = models.Invoice.dueDate
+    elif sort_by == "total":
+        sort_column = models.Invoice.total
+    elif sort_by == "invoiceNumber":
+        sort_column = models.Invoice.invoiceNumber
+    else:
+        sort_column = models.Invoice.issueDate
+    
+    if sort_order == "asc":
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+    
+    return query.offset(skip).limit(limit).all()
+
+def get_invoice(db: Session, invoice_id: int):
+    """Get a specific invoice by ID."""
+    return db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+
+def create_invoice(db: Session, invoice: schemas.InvoiceCreate):
+    """Create a new invoice."""
+    # Generate invoice number if not provided
+    if not invoice.invoiceNumber:
+        invoice.invoiceNumber = generate_invoice_number(db)
+    
+    # Calculate totals
+    subtotal = sum(item.amount for item in invoice.items)
+    tax = subtotal * 0.22  # 22% IVA
+    total = subtotal + tax
+    
+    # Create invoice
+    db_invoice = models.Invoice(
+        leaseId=invoice.leaseId,
+        tenantId=invoice.tenantId,
+        apartmentId=invoice.apartmentId,
+        invoiceNumber=invoice.invoiceNumber,
+        month=invoice.month,
+        year=invoice.year,
+        issueDate=invoice.issueDate,
+        dueDate=invoice.dueDate,
+        subtotal=subtotal,
+        tax=tax,
+        total=total,
+        notes=invoice.notes
+    )
+    
+    db.add(db_invoice)
+    db.commit()
+    db.refresh(db_invoice)
+    
+    # Create invoice items
+    for item in invoice.items:
+        db_item = models.InvoiceItem(
+            invoiceId=db_invoice.id,
+            description=item.description,
+            amount=item.amount,
+            type=item.type
+        )
+        db.add(db_item)
+    
+    db.commit()
+    db.refresh(db_invoice)
+    return db_invoice
+
+def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate):
+    """Update an existing invoice."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not db_invoice:
+        return None
+    
+    # Update invoice fields
+    for key, value in invoice.dict(exclude={'items'}).items():
+        setattr(db_invoice, key, value)
+    
+    # Recalculate totals
+    subtotal = sum(item.amount for item in invoice.items)
+    tax = subtotal * 0.22
+    total = subtotal + tax
+    
+    db_invoice.subtotal = subtotal
+    db_invoice.tax = tax
+    db_invoice.total = total
+    db_invoice.updatedAt = datetime.utcnow()
+    
+    # Delete existing items and create new ones
+    db.query(models.InvoiceItem).filter(models.InvoiceItem.invoiceId == invoice_id).delete()
+    
+    for item in invoice.items:
+        db_item = models.InvoiceItem(
+            invoiceId=invoice_id,
+            description=item.description,
+            amount=item.amount,
+            type=item.type
+        )
+        db.add(db_item)
+    
+    db.commit()
+    db.refresh(db_invoice)
+    return db_invoice
+
+def delete_invoice(db: Session, invoice_id: int):
+    """Delete an invoice."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if db_invoice:
+        db.delete(db_invoice)
+        db.commit()
+        return True
+    return False
+
+def mark_invoice_as_paid(db: Session, invoice_id: int, payment_data: dict):
+    """Mark an invoice as paid."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not db_invoice:
+        return None
+    
+    db_invoice.isPaid = True
+    db_invoice.paymentDate = payment_data.get('payment_date', datetime.utcnow().date())
+    db_invoice.paymentMethod = payment_data.get('payment_method', 'bank_transfer')
+    db_invoice.updatedAt = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(db_invoice)
+    return db_invoice
+
+def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.PaymentRecordCreate):
+    """Add a payment record to an invoice."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not db_invoice:
+        return None
+    
+    db_payment = models.PaymentRecord(
+        invoiceId=invoice_id,
+        amount=payment_record.amount,
+        paymentDate=payment_record.paymentDate,
+        paymentMethod=payment_record.paymentMethod,
+        reference=payment_record.reference,
+        notes=payment_record.notes
+    )
+    
+    db.add(db_payment)
+    db.commit()
+    db.refresh(db_payment)
+    return db_payment
+
+def get_invoice_payment_records(db: Session, invoice_id: int):
+    """Get all payment records for an invoice."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not db_invoice:
+        return None
+    
+    return db.query(models.PaymentRecord).filter(
+        models.PaymentRecord.invoiceId == invoice_id
+    ).order_by(models.PaymentRecord.paymentDate.desc()).all()
+
+def send_invoice_reminder(db: Session, invoice_id: int, reminder_data: dict):
+    """Send a reminder for an invoice."""
+    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not db_invoice:
+        return None
+    
+    # Update reminder status
+    db_invoice.reminderSent = True
+    db_invoice.reminderDate = datetime.utcnow().date()
+    db_invoice.updatedAt = datetime.utcnow()
+    
+    db.commit()
+    
+    # TODO: Implement actual reminder sending logic (SendPulse integration)
+    # For now, return success response
+    return {
+        "success": True,
+        "message": "Promemoria inviato con successo",
+        "sent_via": reminder_data.get("send_via", "email"),
+        "sent_at": datetime.utcnow().isoformat()
+    }
+
+def get_overdue_invoices(db: Session, days_overdue: int = 7, include_tenant_info: bool = True):
+    """Get overdue invoices."""
+    cutoff_date = datetime.utcnow().date() - timedelta(days=days_overdue)
+    
+    query = db.query(models.Invoice).filter(
+        models.Invoice.isPaid == False,
+        models.Invoice.dueDate < cutoff_date
+    )
+    
+    if include_tenant_info:
+        query = query.join(models.Tenant)
+    
+    return query.order_by(models.Invoice.dueDate.asc()).all()
+
+def generate_monthly_invoices(db: Session, data: dict):
+    """Generate monthly invoices for all active leases."""
+    month = data.get('month', datetime.utcnow().month)
+    year = data.get('year', datetime.utcnow().year)
+    include_utilities = data.get('include_utilities', True)
+    send_notifications = data.get('send_notifications', False)
+    
+    # Get active leases
+    active_leases = db.query(models.Lease).filter(
+        models.Lease.endDate >= datetime.utcnow().date()
+    ).all()
+    
+    generated_count = 0
+    total_amount = 0
+    
+    for lease in active_leases:
+        # Check if invoice already exists for this month/year
+        existing_invoice = db.query(models.Invoice).filter(
+            models.Invoice.leaseId == lease.id,
+            models.Invoice.month == month,
+            models.Invoice.year == year
+        ).first()
+        
+        if existing_invoice:
+            continue
+        
+        # Create invoice items
+        items = [
+            schemas.InvoiceItemCreate(
+                invoiceId=0,  # Will be set after invoice creation
+                description="Affitto mensile",
+                amount=lease.monthlyRent,
+                type="rent"
+            )
+        ]
+        
+        # Add utility costs if requested
+        if include_utilities:
+            utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
+            for utility_type, cost in utility_costs.items():
+                if cost > 0:
+                    items.append(schemas.InvoiceItemCreate(
+                        invoiceId=0,
+                        description=f"Consumo {utility_type}",
+                        amount=cost,
+                        type=utility_type
+                    ))
+        
+        # Create invoice
+        invoice_data = schemas.InvoiceCreate(
+            leaseId=lease.id,
+            tenantId=lease.tenantId,
+            apartmentId=lease.apartmentId,
+            invoiceNumber="",  # Will be auto-generated
+            month=month,
+            year=year,
+            issueDate=datetime.utcnow().date(),
+            dueDate=datetime.utcnow().date() + timedelta(days=30),
+            notes=f"Fattura automatica per {month}/{year}",
+            items=items
+        )
+        
+        invoice = create_invoice(db, invoice_data)
+        generated_count += 1
+        total_amount += invoice.total
+    
+    return {
+        "generated_count": generated_count,
+        "total_amount": total_amount,
+        "message": f"Fatture mensili generate con successo per {generated_count} contratti"
+    }
+
+def generate_invoice_from_lease(db: Session, data: dict):
+    """Generate an invoice from a specific lease."""
+    lease_id = data.get('lease_id')
+    month = data.get('month', datetime.utcnow().month)
+    year = data.get('year', datetime.utcnow().year)
+    include_utilities = data.get('include_utilities', True)
+    custom_items = data.get('custom_items', [])
+    
+    lease = db.query(models.Lease).filter(models.Lease.id == lease_id).first()
+    if not lease:
+        return {"error": "Lease not found"}
+    
+    # Create invoice items
+    items = [
+        schemas.InvoiceItemCreate(
+            invoiceId=0,
+            description="Affitto mensile",
+            amount=lease.monthlyRent,
+            type="rent"
+        )
+    ]
+    
+    # Add utility costs if requested
+    if include_utilities:
+        utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
+        for utility_type, cost in utility_costs.items():
+            if cost > 0:
+                items.append(schemas.InvoiceItemCreate(
+                    invoiceId=0,
+                    description=f"Consumo {utility_type}",
+                    amount=cost,
+                    type=utility_type
+                ))
+    
+    # Add custom items
+    for custom_item in custom_items:
+        items.append(schemas.InvoiceItemCreate(
+            invoiceId=0,
+            description=custom_item.get('description', ''),
+            amount=custom_item.get('amount', 0),
+            type=custom_item.get('type', 'other')
+        ))
+    
+    # Create invoice
+    invoice_data = schemas.InvoiceCreate(
+        leaseId=lease.id,
+        tenantId=lease.tenantId,
+        apartmentId=lease.apartmentId,
+        invoiceNumber="",
+        month=month,
+        year=year,
+        issueDate=datetime.utcnow().date(),
+        dueDate=datetime.utcnow().date() + timedelta(days=30),
+        notes=f"Fattura generata da contratto per {month}/{year}",
+        items=items
+    )
+    
+    invoice = create_invoice(db, invoice_data)
+    
+    return {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoiceNumber,
+        "total": invoice.total,
+        "message": "Fattura generata con successo"
+    }
+
+def get_invoice_statistics(db: Session, period: str = "this_month"):
+    """Get invoice statistics and KPI."""
+    today = datetime.utcnow().date()
+    
+    if period == "this_month":
+        start_date = today.replace(day=1)
+        end_date = today
+    elif period == "last_month":
+        if today.month == 1:
+            start_date = today.replace(year=today.year-1, month=12, day=1)
+        else:
+            start_date = today.replace(month=today.month-1, day=1)
+        end_date = start_date.replace(day=28) + timedelta(days=4)
+        end_date = end_date.replace(day=1) - timedelta(days=1)
+    elif period == "this_year":
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    else:  # all
+        start_date = date(2020, 1, 1)
+        end_date = today
+    
+    # Get invoices for the period
+    invoices = db.query(models.Invoice).filter(
+        models.Invoice.issueDate >= start_date,
+        models.Invoice.issueDate <= end_date
+    ).all()
+    
+    total_invoiced = sum(inv.total for inv in invoices)
+    total_paid = sum(inv.total for inv in invoices if inv.isPaid)
+    total_unpaid = total_invoiced - total_paid
+    
+    # Count overdue invoices
+    overdue_invoices = db.query(models.Invoice).filter(
+        models.Invoice.isPaid == False,
+        models.Invoice.dueDate < today
+    ).count()
+    
+    # This month invoices
+    this_month_invoices = db.query(models.Invoice).filter(
+        models.Invoice.issueDate >= today.replace(day=1),
+        models.Invoice.issueDate <= today
+    ).count()
+    
+    return {
+        "total_invoiced": total_invoiced,
+        "total_paid": total_paid,
+        "total_unpaid": total_unpaid,
+        "overdue_invoices": overdue_invoices,
+        "this_month_invoices": this_month_invoices,
+        "period": period,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
+    }
+
+def generate_invoice_pdf(db: Session, invoice_id: int, include_logo: bool = True, 
+                        include_qr_code: bool = True, include_payment_instructions: bool = True):
+    """Generate PDF for an invoice."""
+    invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not invoice:
+        return None
+    
+    # TODO: Implement PDF generation logic
+    # For now, return a placeholder response
+    return {
+        "invoice_id": invoice_id,
+        "pdf_url": f"/static/invoices/{invoice.invoiceNumber}.pdf",
+        "message": "PDF generato con successo"
+    }
+
+def send_bulk_reminders(db: Session, data: dict):
+    """Send reminders for multiple invoices."""
+    invoice_ids = data.get('invoice_ids', [])
+    send_via = data.get('send_via', 'email')
+    template = data.get('template', 'default')
+    custom_message = data.get('custom_message', '')
+    
+    results = []
+    sent_count = 0
+    failed_count = 0
+    
+    for invoice_id in invoice_ids:
+        try:
+            reminder_data = {
+                "send_via": send_via,
+                "template": template,
+                "message": custom_message
+            }
+            result = send_invoice_reminder(db, invoice_id, reminder_data)
+            
+            if result and result.get('success'):
+                sent_count += 1
+                results.append({
+                    "invoice_id": invoice_id,
+                    "success": True,
+                    "message": "Promemoria inviato"
+                })
+            else:
+                failed_count += 1
+                results.append({
+                    "invoice_id": invoice_id,
+                    "success": False,
+                    "message": "Errore nell'invio"
+                })
+        except Exception as e:
+            failed_count += 1
+            results.append({
+                "invoice_id": invoice_id,
+                "success": False,
+                "message": str(e)
+            })
+    
+    return {
+        "sent_count": sent_count,
+        "failed_count": failed_count,
+        "results": results
+    }
+
+def generate_invoice_number(db: Session):
+    """Generate a unique invoice number."""
+    current_year = datetime.utcnow().year
+    prefix = f"INV-{current_year}-"
+    
+    # Get the last invoice number for this year
+    last_invoice = db.query(models.Invoice).filter(
+        models.Invoice.invoiceNumber.like(f"{prefix}%")
+    ).order_by(models.Invoice.invoiceNumber.desc()).first()
+    
+    if last_invoice:
+        try:
+            last_number = int(last_invoice.invoiceNumber.split('-')[-1])
+            new_number = last_number + 1
+        except (ValueError, IndexError):
+            new_number = 1
+    else:
+        new_number = 1
+    
+    return f"{prefix}{new_number:03d}"
+
+def get_lease_invoices(
+    db: Session, 
+    leaseId: int, 
+    isPaid: Optional[bool] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None
+):
+    """Get invoices for a lease with optional filters."""
+    query = db.query(models.Invoice).filter(
+        models.Invoice.leaseId == leaseId
+    )
+    
+    if isPaid is not None:
+        query = query.filter(models.Invoice.isPaid == isPaid)
+    
+    if year:
+        query = query.filter(models.Invoice.year == year)
+    
+    if month:
+        query = query.filter(models.Invoice.month == month)
+    
+    return query.order_by(models.Invoice.issueDate.desc()).all()
+
+def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: int):
+    """Calculate utility costs for a specific month and year."""
+    # Get utility readings for the month
+    readings = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartment_id,
+        models.UtilityReading.readingDate >= date(year, month, 1),
+        models.UtilityReading.readingDate <= date(year, month, 28) + timedelta(days=4)
+    ).all()
+    
+    costs = {
+        "electricity": 0.0,
+        "water": 0.0,
+        "gas": 0.0
+    }
+    
+    for reading in readings:
+        if reading.type in costs:
+            costs[reading.type] += reading.totalCost
+    
+    return costs

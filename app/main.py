@@ -14,7 +14,7 @@ from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 from starlette.responses import RedirectResponse
 
 from app.config import settings
-from app.routers import apartments, tenants, leases, utilities, auth, users
+from app.routers import apartments, tenants, leases, utilities, auth, users, invoices
 from app.database import create_tables
 from app.utils.rate_limiter import limiter
 
@@ -280,6 +280,7 @@ app.include_router(apartments.router)
 app.include_router(tenants.router)
 app.include_router(leases.router)
 app.include_router(utilities.router)
+app.include_router(invoices.router)  # Invoices router
 app.include_router(auth.router)  # Authentication router
 app.include_router(users.router)  # Users router
 
