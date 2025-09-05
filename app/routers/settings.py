@@ -8,7 +8,7 @@ from app.core.auth import get_current_active_user
 from app.models.models import User
 
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 def to_read_schema(obj) -> BillingDefaultsRead:
