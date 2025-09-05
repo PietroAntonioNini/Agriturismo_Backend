@@ -392,3 +392,25 @@ class UtilityTypeConfig(CamelCaseModel):
     icon: str
     color: str
     defaultCost: float
+
+
+# ------------------ SCHEMA BILLING DEFAULTS ------------------
+class UnitCosts(CamelCaseModel):
+    electricity: float = Field(ge=0)
+    water: float = Field(ge=0)
+    gas: float = Field(ge=0)
+
+
+class BillingDefaultsRead(CamelCaseModel):
+    tari: float
+    meterFee: float
+    unitCosts: UnitCosts
+
+    class Config:
+        from_attributes = True
+
+
+class BillingDefaultsUpdate(CamelCaseModel):
+    tari: float | None = Field(default=None, ge=0)
+    meterFee: float | None = Field(default=None, ge=0)
+    unitCosts: UnitCosts | None = None

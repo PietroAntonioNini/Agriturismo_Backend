@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, Float, Date, DateTime, JSON, Enum
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, Float, Date, DateTime, JSON, Enum, Numeric, BigInteger
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -353,3 +353,21 @@ class PasswordResetToken(Base):
 
     # Relazioni
     user = relationship("User", back_populates="reset_tokens")
+
+
+class BillingDefaults(Base):
+    __tablename__ = "billing_defaults"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Valori globali
+    tari = Column(Numeric(10, 2), nullable=False, default=15.00)
+    meterFee = Column(Numeric(10, 2), nullable=False, default=3.00)
+
+    # Costi unitari per utilities
+    unitCostElectricity = Column(Numeric(10, 4), nullable=False, default=0.75)
+    unitCostWater = Column(Numeric(10, 4), nullable=False, default=3.40)
+    unitCostGas = Column(Numeric(10, 4), nullable=False, default=4.45)
+
+    # Audit
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updatedBy = Column(BigInteger, nullable=True)
