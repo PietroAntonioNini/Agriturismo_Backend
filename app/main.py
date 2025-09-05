@@ -15,6 +15,7 @@ from starlette.responses import RedirectResponse
 
 from app.config import settings
 from app.routers import apartments, tenants, leases, utilities, auth, users
+from app.routers import settings as settings_router
 logger = logging.getLogger(__name__)
 
 # Debug import invoices
@@ -30,15 +31,6 @@ except Exception as e:
     from fastapi import APIRouter
     invoices = type('MockInvoices', (), {'router': APIRouter()})()
 
-# Import lazy del router settings
-try:
-    logger.info("Tentativo di import del router settings...")
-    from app.routers import settings as settings_router
-    logger.info("✅ Router settings importato con successo!")
-except Exception as e:
-    logger.error(f"❌ Errore nell'import del router settings: {e}")
-    from fastapi import APIRouter
-    settings_router = type('MockSettings', (), {'router': APIRouter()})()
 
 from app.database import create_tables
 from app.utils.rate_limiter import limiter
@@ -317,6 +309,8 @@ logger.info("Registrazione router users...")
 app.include_router(users.router)  # Users router
 logger.info("Registrazione router settings...")
 app.include_router(settings_router.router)  # Settings router
+logger.info("Registrazione router settings (compat /api)...")
+app.include_router(settings_router.router, prefix="/api")  # Compatibilità con chiamate /api/settings
 logger.info("✅ Tutti i router registrati con successo!")
 
 # Personalizzazione della UI Swagger per abilitare inserimento diretto del token JWT
