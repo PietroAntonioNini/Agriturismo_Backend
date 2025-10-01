@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     app_name: str = "FastAPI Backend"
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Fix per Koyeb: converti postgres:// in postgresql://
+        if self.database_url.startswith("postgres://"):
+            self.database_url = self.database_url.replace("postgres://", "postgresql://", 1)
     secret_key: str = os.getenv("SECRET_KEY", "una_chiave_segreta_predefinita")
     algorithm: str = os.getenv("ALGORITHM", "HS256")
     # Token settings
