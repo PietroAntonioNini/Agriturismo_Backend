@@ -27,7 +27,12 @@ target_metadata = Base.metadata
 # ... etc.
 
 def get_url():
-    return settings.database_url
+    # Ensure PostgreSQL driver is specified
+    url = settings.database_url
+    if url.startswith("postgresql://"):
+        # Replace postgresql:// with postgresql+psycopg2://
+        url = url.replace("postgresql://", "postgresql+psycopg2://")
+    return url
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
