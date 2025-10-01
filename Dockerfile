@@ -35,4 +35,4 @@ COPY migrations/ ./migrations/
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 EXPOSE 8000
-CMD ["uvicorn", "--host", "0.0.0.0", "app.main:app"] 
+CMD ["sh", "-c", "alembic upgrade head && uvicorn --host 0.0.0.0 app.main:app"] 
