@@ -313,6 +313,12 @@ class UtilityReading(Base):
     # Tipologia di lettura (electricity, water, gas)
     type = Column(String, nullable=False)
 
+    # Sottotipo per letture speciali (es. 'main', 'laundry' per elettricità)
+    subtype = Column(String, nullable=True)
+
+    # Flag per identificare letture speciali
+    isSpecialReading = Column(Boolean, default=False)
+
     # Date e campi di consumo
     readingDate = Column(Date, nullable=False)
     previousReading = Column(Float, default=0.0)

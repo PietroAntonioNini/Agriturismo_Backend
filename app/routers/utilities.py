@@ -20,12 +20,13 @@ def get_utility_readings(
     limit: int = 100,
     apartmentId: Optional[int] = None,
     type: Optional[str] = None,
+    subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
     isPaid: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    return service.get_utility_readings(db, skip, limit, apartmentId, type, year, month, isPaid)
+    return service.get_utility_readings(db, skip, limit, apartmentId, type, subtype, year, month, isPaid)
 
 # GET utility type configurations
 @router.get("/types", response_model=List[schemas.UtilityTypeConfig])
@@ -74,8 +75,8 @@ def create_utility_reading(reading: schemas.UtilityReadingCreate, db: Session = 
     if not apartment:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
-    # Prendi l'ultima lettura dello stesso tipo per calcolare il consumo
-    last_reading = service.get_last_utility_reading(db, reading.apartmentId, reading.type)
+    # Prendi l'ultima lettura dello stesso tipo e sottotipo per calcolare il consumo
+    last_reading = service.get_last_utility_reading(db, reading.apartmentId, reading.type, reading.subtype)
     
     # Se c'è una lettura precedente, calcola il consumo
     if last_reading:
@@ -234,13 +235,14 @@ def get_utility_statistics_overview(
 def get_last_reading_info(
     apartmentId: int,
     type: str,
+    subtype: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     apartment = service.get_apartment(db, apartmentId)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
-    last_reading = service.get_last_utility_reading(db, apartmentId, type)
+    last_reading = service.get_last_utility_reading(db, apartmentId, type, subtype)
     
     if last_reading is None:
         return {
@@ -248,7 +250,8 @@ def get_last_reading_info(
             "type": type,
             "lastReading": 0.0,
             "lastReadingDate": datetime.now().date(),
-            "hasHistory": False
+            "hasHistory": False,
+            "subtype": subtype
         }
     
     return {
@@ -256,7 +259,8 @@ def get_last_reading_info(
         "type": type,
         "lastReading": last_reading.currentReading,
         "lastReadingDate": last_reading.readingDate,
-        "hasHistory": True
+        "hasHistory": True,
+        "subtype": last_reading.subtype
     }
 
 # BULK operations for multiple readings
@@ -275,7 +279,7 @@ def create_bulk_utility_readings(
             raise HTTPException(status_code=404, detail=f"Apartment {reading_data.apartmentId} not found")
         
         # Get last reading for calculation
-        last_reading = service.get_last_utility_reading(db, reading_data.apartmentId, reading_data.type)
+        last_reading = service.get_last_utility_reading(db, reading_data.apartmentId, reading_data.type, reading_data.subtype)
         
         if last_reading:
             if reading_data.currentReading < last_reading.currentReading:

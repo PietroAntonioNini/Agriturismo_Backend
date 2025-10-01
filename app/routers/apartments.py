@@ -180,6 +180,7 @@ def get_apartment_tenants(apartmentId: int, db: Session = Depends(get_db)):
 def get_apartment_utilities(
     apartmentId: int,
     type: Optional[str] = None,
+    subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
     db: Session = Depends(get_db)
@@ -187,7 +188,7 @@ def get_apartment_utilities(
     apartment = service.get_apartment(db, apartmentId)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_utilities(db, apartmentId, type, year, month)
+    return service.get_apartment_utilities(db, apartmentId, type, subtype, year, month)
 
 # GET apartment's maintenance records
 @router.get("/{apartmentId}/maintenance", response_model=List[schemas.MaintenanceRecord])

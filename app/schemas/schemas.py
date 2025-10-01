@@ -29,6 +29,8 @@ class UtilityReadingBase(CamelCaseModel):
     totalCost: float
     isPaid: bool = False
     notes: Optional[str] = None
+    subtype: Optional[str] = None
+    isSpecialReading: Optional[bool] = None
     electricityConsumption: Optional[float] = None
     waterConsumption: Optional[float] = None
     gasConsumption: Optional[float] = None
@@ -376,6 +378,7 @@ class LastReading(CamelCaseModel):
     lastReading: float
     lastReadingDate: date
     hasHistory: bool
+    subtype: Optional[str] = None
 
 class UtilityFormData(CamelCaseModel):
     apartmentId: int
@@ -384,6 +387,8 @@ class UtilityFormData(CamelCaseModel):
     currentReading: float
     unitCost: float
     notes: Optional[str] = None
+    subtype: Optional[str] = None
+    isSpecialReading: Optional[bool] = None
 
 class UtilityTypeConfig(CamelCaseModel):
     type: str

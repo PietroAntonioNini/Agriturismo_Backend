@@ -205,6 +205,7 @@ def get_apartment_utilities(
     db: Session, 
     apartmentId: int, 
     type: Optional[str] = None,
+    subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None
 ):
@@ -215,6 +216,9 @@ def get_apartment_utilities(
     
     if type:
         query = query.filter(models.UtilityReading.type == type)
+    
+    if subtype:
+        query = query.filter(models.UtilityReading.subtype == subtype)
     
     if year:
         query = query.filter(
@@ -751,6 +755,7 @@ def get_utility_readings(
     limit: int = 100,
     apartmentId: Optional[int] = None,
     type: Optional[str] = None,
+    subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
     isPaid: Optional[bool] = None
@@ -763,6 +768,9 @@ def get_utility_readings(
     
     if type is not None:
         query = query.filter(models.UtilityReading.type == type)
+    
+    if subtype is not None:
+        query = query.filter(models.UtilityReading.subtype == subtype)
     
     if year is not None:
         query = query.filter(func.extract('year', models.UtilityReading.readingDate) == year)
@@ -779,12 +787,17 @@ def get_utility_reading(db: Session, reading_id: int):
     """Get a specific utility reading by ID."""
     return db.query(models.UtilityReading).filter(models.UtilityReading.id == reading_id).first()
 
-def get_last_utility_reading(db: Session, apartmentId: int, type: str):
+def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: Optional[str] = None):
     """Get the last utility reading for a specific apartment and type."""
-    return db.query(models.UtilityReading).filter(
+    query = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId,
         models.UtilityReading.type == type
-    ).order_by(models.UtilityReading.readingDate.desc()).first()
+    )
+    
+    if subtype is not None:
+        query = query.filter(models.UtilityReading.subtype == subtype)
+    
+    return query.order_by(models.UtilityReading.readingDate.desc()).first()
 
 def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate):
     """Create a new utility reading."""
@@ -1452,12 +1465,21 @@ def generate_monthly_invoices(db: Session, data: dict):
             utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
             for utility_type, cost in utility_costs.items():
                 if cost > 0:
-                    items.append(schemas.InvoiceItemCreate(
-                        invoiceId=0,
-                        description=f"Consumo {utility_type}",
-                        amount=cost,
-                        type=utility_type
-                    ))
+                    # Special handling for electricity_laundry
+                    if utility_type == "electricity_laundry":
+                        items.append(schemas.InvoiceItemCreate(
+                            invoiceId=0,
+                            description="Elettricità Lavanderia",
+                            amount=cost,
+                            type="other"
+                        ))
+                    else:
+                        items.append(schemas.InvoiceItemCreate(
+                            invoiceId=0,
+                            description=f"Consumo {utility_type}",
+                            amount=cost,
+                            type=utility_type
+                        ))
         
         # Create invoice
         invoice_data = schemas.InvoiceCreate(
@@ -1510,12 +1532,21 @@ def generate_invoice_from_lease(db: Session, data: dict):
         utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
         for utility_type, cost in utility_costs.items():
             if cost > 0:
-                items.append(schemas.InvoiceItemCreate(
-                    invoiceId=0,
-                    description=f"Consumo {utility_type}",
-                    amount=cost,
-                    type=utility_type
-                ))
+                # Special handling for electricity_laundry
+                if utility_type == "electricity_laundry":
+                    items.append(schemas.InvoiceItemCreate(
+                        invoiceId=0,
+                        description="Elettricità Lavanderia",
+                        amount=cost,
+                        type="other"
+                    ))
+                else:
+                    items.append(schemas.InvoiceItemCreate(
+                        invoiceId=0,
+                        description=f"Consumo {utility_type}",
+                        amount=cost,
+                        type=utility_type
+                    ))
     
     # Add custom items
     for custom_item in custom_items:
@@ -1725,8 +1756,30 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
         "gas": 0.0
     }
     
-    for reading in readings:
-        if reading.type in costs:
-            costs[reading.type] += reading.totalCost
+    # Special handling for apartment 8 (ID 11) - separate electricity main and laundry
+    if apartment_id == 11:  # Appartamento 8
+        electricity_main = 0.0
+        electricity_laundry = 0.0
+        
+        for reading in readings:
+            if reading.type == "electricity":
+                if reading.subtype == "laundry":
+                    electricity_laundry += reading.totalCost
+                else:  # main or None
+                    electricity_main += reading.totalCost
+            elif reading.type in costs:
+                costs[reading.type] += reading.totalCost
+        
+        # Set main electricity cost
+        costs["electricity"] = electricity_main
+        
+        # Add laundry electricity as a separate cost type
+        if electricity_laundry > 0:
+            costs["electricity_laundry"] = electricity_laundry
+    else:
+        # Standard processing for other apartments
+        for reading in readings:
+            if reading.type in costs:
+                costs[reading.type] += reading.totalCost
     
     return costs
