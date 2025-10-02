@@ -53,21 +53,27 @@ def get_apartment(apartmentId: int, db: Session = Depends(get_db)):
 
 # POST create apartment
 @router.post("/", response_model=schemas.Apartment, status_code=status.HTTP_201_CREATED)
-def create_apartment(apartment: schemas.ApartmentCreate, db: Session = Depends(get_db)):
-    return service.create_apartment(db, apartment)
+def create_apartment(
+    apartment: schemas.ApartmentCreate,
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
+):
+    return service.create_apartment(db, apartment, user_id=user_id)
 
 # POST create apartment with images
 @router.post("/with-images", response_model=schemas.Apartment, status_code=status.HTTP_201_CREATED)
 async def create_apartment_with_images(
     apartment: str = Form(...),
     files: List[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
     apartment_data = json.loads(apartment)
+    resolved_user_id = user_id or apartment_data.get("userId") or apartment_data.get("user_id")
     apartment_obj = schemas.ApartmentCreate(**apartment_data)
     
     # Create the apartment first
-    new_apartment = service.create_apartment(db, apartment_obj)
+    new_apartment = service.create_apartment(db, apartment_obj, user_id=resolved_user_id)
     
     # Handle file uploads if any
     if files:

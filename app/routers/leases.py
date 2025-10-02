@@ -36,7 +36,11 @@ def get_lease(leaseId: int, db: Session = Depends(get_db)):
 
 # POST create lease
 @router.post("/", response_model=schemas.Lease, status_code=status.HTTP_201_CREATED)
-def create_lease(lease: schemas.LeaseCreate, db: Session = Depends(get_db)):
+def create_lease(
+    lease: schemas.LeaseCreate,
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
+):
     # Verifica che l'appartamento esista e sia disponibile
     apartment = service.get_apartment(db, lease.apartmentId)
     if not apartment:
@@ -50,7 +54,7 @@ def create_lease(lease: schemas.LeaseCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     # Crea il contratto
-    db_lease = service.create_lease(db, lease)
+    db_lease = service.create_lease(db, lease, user_id=user_id)
     
     # Aggiorna lo stato dell'appartamento a "occupied"
     service.update_apartment_status(db, lease.apartmentId, "occupied")

@@ -69,7 +69,11 @@ def get_utility_reading(reading_id: int, db: Session = Depends(get_db)):
 
 # POST create utility reading
 @router.post("/", response_model=schemas.UtilityReading, status_code=status.HTTP_201_CREATED)
-def create_utility_reading(reading: schemas.UtilityReadingCreate, db: Session = Depends(get_db)):
+def create_utility_reading(
+    reading: schemas.UtilityReadingCreate,
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
+):
     # Verifica che l'appartamento esista
     apartment = service.get_apartment(db, reading.apartmentId)
     if not apartment:
@@ -97,7 +101,7 @@ def create_utility_reading(reading: schemas.UtilityReadingCreate, db: Session = 
     reading.totalCost = reading.consumption * reading.unitCost
     
     # Crea la lettura
-    return service.create_utility_reading(db, reading)
+    return service.create_utility_reading(db, reading, user_id=user_id)
 
 # PUT update utility reading
 @router.put("/{reading_id}", response_model=schemas.UtilityReading)

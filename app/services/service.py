@@ -52,8 +52,11 @@ def get_apartments(
 def get_apartment(db: Session, apartmentId: int):
     return db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
 
-def create_apartment(db: Session, apartment: schemas.ApartmentCreate):
-    db_apartment = models.Apartment(**apartment.dict())
+def create_apartment(db: Session, apartment: schemas.ApartmentCreate, user_id: Optional[int] = None):
+    data = apartment.dict()
+    if user_id is not None:
+        data["userId"] = user_id
+    db_apartment = models.Apartment(**data)
     db.add(db_apartment)
     db.commit()
     db.refresh(db_apartment)
@@ -317,7 +320,7 @@ def get_tenants(db: Session, skip: int = 0, limit: int = 100):
 def get_tenant(db: Session, tenantId: int):
     return db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
 
-def create_tenant(db: Session, tenant: schemas.TenantCreate):
+def create_tenant(db: Session, tenant: schemas.TenantCreate, user_id: Optional[int] = None):
     # Convert Pydantic model to dict
     tenant_data = tenant.dict() if hasattr(tenant, "dict") else dict(tenant)
     
@@ -326,6 +329,10 @@ def create_tenant(db: Session, tenant: schemas.TenantCreate):
         if hasattr(tenant_data["communicationPreferences"], "dict"):
             tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
     
+    # Associa l'utente se fornito (multi-tenancy)
+    if user_id is not None:
+        tenant_data["userId"] = user_id
+
     db_tenant = models.Tenant(**tenant_data)
     db.add(db_tenant)
     
@@ -516,7 +523,7 @@ async def delete_tenant_document(db: Session, tenantId: int, doc_type: str):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore durante l'eliminazione: {str(e)}")
     
-def create_tenant_without_commit(db: Session, tenant: schemas.TenantCreate):
+def create_tenant_without_commit(db: Session, tenant: schemas.TenantCreate, user_id: Optional[int] = None):
     """Crea un tenant senza fare commit della transazione."""
     tenant_data = tenant.dict() if hasattr(tenant, "dict") else dict(tenant)
     
@@ -524,6 +531,10 @@ def create_tenant_without_commit(db: Session, tenant: schemas.TenantCreate):
         if hasattr(tenant_data["communicationPreferences"], "dict"):
             tenant_data["communicationPreferences"] = tenant_data["communicationPreferences"].dict()
     
+    # Associa l'utente se fornito (multi-tenancy)
+    if user_id is not None:
+        tenant_data["userId"] = user_id
+
     db_tenant = models.Tenant(**tenant_data)
     db.add(db_tenant)
     db.flush()  # Genera l'ID senza fare commit
@@ -619,9 +630,12 @@ def get_lease(db: Session, leaseId: int):
     """Get a specific lease by ID."""
     return db.query(models.Lease).filter(models.Lease.id == leaseId).first()
 
-def create_lease(db: Session, lease: schemas.LeaseCreate):
+def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int] = None):
     """Create a new lease."""
-    db_lease = models.Lease(**lease.dict())
+    data = lease.dict()
+    if user_id is not None:
+        data["userId"] = user_id
+    db_lease = models.Lease(**data)
     db.add(db_lease)
     db.commit()
     db.refresh(db_lease)
@@ -799,9 +813,12 @@ def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: 
     
     return query.order_by(models.UtilityReading.readingDate.desc()).first()
 
-def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate):
+def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate, user_id: Optional[int] = None):
     """Create a new utility reading."""
-    db_reading = models.UtilityReading(**reading.dict())
+    data = reading.dict()
+    if user_id is not None:
+        data["userId"] = user_id
+    db_reading = models.UtilityReading(**data)
     db.add(db_reading)
     db.commit()
     db.refresh(db_reading)
@@ -1253,7 +1270,7 @@ def get_invoice(db: Session, invoice_id: int):
     """Get a specific invoice by ID."""
     return db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
 
-def create_invoice(db: Session, invoice: schemas.InvoiceCreate):
+def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optional[int] = None):
     """Create a new invoice."""
     # Generate invoice number if not provided
     if not invoice.invoiceNumber:
@@ -1277,7 +1294,8 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate):
         subtotal=subtotal,
         tax=tax,
         total=total,
-        notes=invoice.notes
+        notes=invoice.notes,
+        userId=user_id if user_id is not None else None
     )
     
     db.add(db_invoice)

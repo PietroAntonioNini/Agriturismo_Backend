@@ -46,8 +46,21 @@ def get_tenant(tenantId: int, db: Session = Depends(get_db)):
 
 # POST create tenant
 @router.post("/", response_model=schemas.Tenant, status_code=status.HTTP_201_CREATED)
-def create_tenant(tenant: schemas.TenantCreate, db: Session = Depends(get_db)):
-    return service.create_tenant(db, tenant=tenant)
+def create_tenant(
+    tenant: schemas.TenantCreate,
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
+):
+    # Fallback: se il frontend non manda user_id come query, prova a leggerlo dal body
+    resolved_user_id = user_id
+    try:
+        if resolved_user_id is None and hasattr(tenant, "dict"):
+            body = tenant.dict()
+            resolved_user_id = body.get("userId") or body.get("user_id")
+    except Exception:
+        pass
+
+    return service.create_tenant(db, tenant=tenant, user_id=resolved_user_id)
 
 # POST create tenant with images
 # POST create tenant with images
@@ -56,7 +69,8 @@ async def create_tenant_with_images(
     tenants: str = Form(...),
     document0: UploadFile = File(None),
     document1: UploadFile = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
     try:
         # Inizia la transazione manualmente
@@ -69,11 +83,14 @@ async def create_tenant_with_images(
                 expiry_date_str = expiry_date_str.split("T")[0]
             tenant_data["documentExpiryDate"] = expiry_date_str
         
+        # Ricava user_id anche dal payload se presente
+        resolved_user_id = user_id or tenant_data.get("userId") or tenant_data.get("user_id")
+
         # Crea l'oggetto tenant
         tenant_obj = schemas.TenantCreate(**tenant_data)
         
         # Crea il tenant, ma non fare commit ancora
-        new_tenant = service.create_tenant_without_commit(db, tenant_obj)
+        new_tenant = service.create_tenant_without_commit(db, tenant_obj, user_id=resolved_user_id)
         
         # Array per tenere traccia dei file salvati
         saved_files = []
