@@ -27,9 +27,16 @@ def get_apartments(
     maxPrice: Optional[float] = None,
     hasBalcony: Optional[bool] = None,
     hasParking: Optional[bool] = None,
-    isFurnished: Optional[bool] = None
+    isFurnished: Optional[bool] = None,
+    user_id: Optional[int] = None
 ):
     query = db.query(models.Apartment)
+    # Soft delete filter
+    if hasattr(models.Apartment, "deletedAt"):
+        query = query.filter(models.Apartment.deletedAt.is_(None))
+    # Multi-tenancy filter
+    if user_id is not None:
+        query = query.filter(models.Apartment.userId == user_id)
     
     # Filter directly by status
     if status:
@@ -49,8 +56,13 @@ def get_apartments(
     
     return query.offset(skip).limit(limit).all()
 
-def get_apartment(db: Session, apartmentId: int):
-    return db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
+def get_apartment(db: Session, apartmentId: int, user_id: Optional[int] = None):
+    query = db.query(models.Apartment).filter(models.Apartment.id == apartmentId)
+    if hasattr(models.Apartment, "deletedAt"):
+        query = query.filter(models.Apartment.deletedAt.is_(None))
+    if user_id is not None:
+        query = query.filter(models.Apartment.userId == user_id)
+    return query.first()
 
 def create_apartment(db: Session, apartment: schemas.ApartmentCreate, user_id: Optional[int] = None):
     data = apartment.dict()
@@ -303,7 +315,7 @@ def get_apartment_invoices(
 
 # ----- Tenant Services -----
 
-def get_tenants(db: Session, skip: int = 0, limit: int = 100):
+def get_tenants(db: Session, skip: int = 0, limit: int = 100, user_id: Optional[int] = None):
     """Ottiene tutti i tenant con query ORM ottimizzata."""
     try:
         # Forza un commit e svuota completamente la cache
@@ -311,7 +323,12 @@ def get_tenants(db: Session, skip: int = 0, limit: int = 100):
         db.expire_all()
         
         # Usa query ORM standard che è più affidabile
-        return db.query(models.Tenant).order_by(models.Tenant.id.desc()).offset(skip).limit(limit).all()
+        query = db.query(models.Tenant)
+        if hasattr(models.Tenant, "deletedAt"):
+            query = query.filter(models.Tenant.deletedAt.is_(None))
+        if user_id is not None:
+            query = query.filter(models.Tenant.userId == user_id)
+        return query.order_by(models.Tenant.id.desc()).offset(skip).limit(limit).all()
     except Exception as e:
         print(f"Errore nella funzione get_tenants: {str(e)}")
         # In caso di errore, riprova con una query più semplice
@@ -608,10 +625,15 @@ def get_leases(
     limit: int = 100,
     status: Optional[str] = None,
     tenantId: Optional[int] = None,
-    apartmentId: Optional[int] = None
+    apartmentId: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """Get leases with optional filters."""
     query = db.query(models.Lease)
+    if hasattr(models.Lease, "deletedAt"):
+        query = query.filter(models.Lease.deletedAt.is_(None))
+    if user_id is not None:
+        query = query.filter(models.Lease.userId == user_id)
     
     if tenantId is not None:
         query = query.filter(models.Lease.tenantId == tenantId)
@@ -626,9 +648,14 @@ def get_leases(
         
     return all_leases
 
-def get_lease(db: Session, leaseId: int):
+def get_lease(db: Session, leaseId: int, user_id: Optional[int] = None):
     """Get a specific lease by ID."""
-    return db.query(models.Lease).filter(models.Lease.id == leaseId).first()
+    query = db.query(models.Lease).filter(models.Lease.id == leaseId)
+    if hasattr(models.Lease, "deletedAt"):
+        query = query.filter(models.Lease.deletedAt.is_(None))
+    if user_id is not None:
+        query = query.filter(models.Lease.userId == user_id)
+    return query.first()
 
 def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int] = None):
     """Create a new lease."""
@@ -772,10 +799,15 @@ def get_utility_readings(
     subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    isPaid: Optional[bool] = None
+    isPaid: Optional[bool] = None,
+    user_id: Optional[int] = None
 ):
     """Get utility readings with optional filters."""
     query = db.query(models.UtilityReading)
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    if hasattr(models.UtilityReading, "deletedAt"):
+        query = query.filter(models.UtilityReading.deletedAt.is_(None))
     
     if apartmentId is not None:
         query = query.filter(models.UtilityReading.apartmentId == apartmentId)
@@ -797,9 +829,14 @@ def get_utility_readings(
     
     return query.order_by(models.UtilityReading.readingDate.desc()).offset(skip).limit(limit).all()
 
-def get_utility_reading(db: Session, reading_id: int):
+def get_utility_reading(db: Session, reading_id: int, user_id: Optional[int] = None):
     """Get a specific utility reading by ID."""
-    return db.query(models.UtilityReading).filter(models.UtilityReading.id == reading_id).first()
+    query = db.query(models.UtilityReading).filter(models.UtilityReading.id == reading_id)
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    if hasattr(models.UtilityReading, "deletedAt"):
+        query = query.filter(models.UtilityReading.deletedAt.is_(None))
+    return query.first()
 
 def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: Optional[str] = None):
     """Get the last utility reading for a specific apartment and type."""
@@ -1206,10 +1243,15 @@ def get_invoices(
     end_date: Optional[date] = None,
     search: Optional[str] = None,
     sort_by: str = "issueDate",
-    sort_order: str = "desc"
+    sort_order: str = "desc",
+    user_id: Optional[int] = None
 ):
     """Get invoices with optional filters."""
     query = db.query(models.Invoice)
+    if hasattr(models.Invoice, "deletedAt"):
+        query = query.filter(models.Invoice.deletedAt.is_(None))
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
     
     # Apply filters
     if status:

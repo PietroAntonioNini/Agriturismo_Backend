@@ -24,9 +24,10 @@ router = APIRouter(
 def get_tenants(
     skip: int = 0, 
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
-    return service.get_tenants(db, skip=skip, limit=limit)
+    return service.get_tenants(db, skip=skip, limit=limit, user_id=user_id)
 
 # GET tenant by ID
 @router.get("/{tenantId}", response_model=schemas.Tenant)

@@ -35,12 +35,13 @@ def get_invoices(
     sort_by: Optional[str] = Query("issueDate", description="Sort by: issueDate, dueDate, total, invoiceNumber"),
     sort_order: Optional[str] = Query("desc", description="Sort order: asc, desc"),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user)
+    current_user: models.User = Depends(get_current_active_user),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
     """Get all invoices with optional filters"""
     return service.get_invoices(
         db, skip, limit, status, tenant_id, apartment_id, lease_id,
-        month, year, start_date, end_date, search, sort_by, sort_order
+        month, year, start_date, end_date, search, sort_by, sort_order, user_id
     )
 
 # GET single invoice

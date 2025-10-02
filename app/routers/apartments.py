@@ -28,17 +28,18 @@ def get_apartments(
     hasBalcony: Optional[bool] = None,
     hasParking: Optional[bool] = None,
     isFurnished: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
     return service.get_apartments(
         db, skip, limit, status, floor,
-        minRooms, maxPrice, hasBalcony, hasParking, isFurnished
+        minRooms, maxPrice, hasBalcony, hasParking, isFurnished, user_id
     )
 
 # GET apartment by ID
 @router.get("/{apartmentId}", response_model=schemas.Apartment)
-def get_apartment(apartmentId: int, db: Session = Depends(get_db)):
-    apartment = service.get_apartment(db, apartmentId)
+def get_apartment(apartmentId: int, db: Session = Depends(get_db), user_id: int | None = Query(default=None, alias="user_id")):
+    apartment = service.get_apartment(db, apartmentId, user_id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     

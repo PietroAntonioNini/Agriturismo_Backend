@@ -22,14 +22,15 @@ def get_leases(
     status: Optional[str] = None,
     tenantId: Optional[int] = None,
     apartmentId: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
-    return service.get_leases(db, skip, limit, status, tenantId, apartmentId)
+    return service.get_leases(db, skip, limit, status, tenantId, apartmentId, user_id)
 
 # GET lease by ID
 @router.get("/{leaseId}", response_model=schemas.Lease)
-def get_lease(leaseId: int, db: Session = Depends(get_db)):
-    lease = service.get_lease(db, leaseId)
+def get_lease(leaseId: int, db: Session = Depends(get_db), user_id: int | None = Query(default=None, alias="user_id")):
+    lease = service.get_lease(db, leaseId, user_id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     return lease

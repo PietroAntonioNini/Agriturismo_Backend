@@ -162,22 +162,24 @@ def get_apartment_utility_readings(
     type: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
-    return service.get_utility_readings(db, apartmentId=apartmentId, type=type, year=year, month=month)
+    return service.get_utility_readings(db, apartmentId=apartmentId, type=type, year=year, month=month, user_id=user_id)
 
 # GET last utility reading for an apartment and type
 @router.get("/apartment/{apartmentId}/last/{type}", response_model=schemas.UtilityReading)
 def get_last_utility_reading_by_type(
     apartmentId: int,
     type: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
