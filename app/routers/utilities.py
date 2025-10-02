@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.services import service
+from app.core.auth import get_current_active_user
 
 router = APIRouter(
     prefix="/utilities",
@@ -72,10 +73,10 @@ def get_utility_reading(reading_id: int, db: Session = Depends(get_db)):
 def create_utility_reading(
     reading: schemas.UtilityReadingCreate,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    # Verifica che l'appartamento esista
-    apartment = service.get_apartment(db, reading.apartmentId)
+    # Verifica che l'appartamento esista e appartenga all'utente corrente
+    apartment = service.get_apartment(db, reading.apartmentId, current_user.id)
     if not apartment:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
@@ -100,17 +101,18 @@ def create_utility_reading(
     # Calcola il costo totale
     reading.totalCost = reading.consumption * reading.unitCost
     
-    # Crea la lettura
-    return service.create_utility_reading(db, reading, user_id=user_id)
+    # Crea la lettura usando l'utente corrente
+    return service.create_utility_reading(db, reading, user_id=current_user.id)
 
 # PUT update utility reading
 @router.put("/{reading_id}", response_model=schemas.UtilityReading)
 def update_utility_reading(
     reading_id: int,
     reading: schemas.UtilityReadingCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_reading = service.get_utility_reading(db, reading_id)
+    existing_reading = service.get_utility_reading(db, reading_id, user_id=current_user.id)
     if existing_reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
     
@@ -137,9 +139,10 @@ def delete_utility_reading(reading_id: int, db: Session = Depends(get_db)):
 def mark_utility_reading_paid(
     reading_id: int,
     payment_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_reading = service.get_utility_reading(db, reading_id)
+    existing_reading = service.get_utility_reading(db, reading_id, user_id=current_user.id)
     if existing_reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
     
