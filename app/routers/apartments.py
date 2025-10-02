@@ -10,7 +10,6 @@ from app.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.services import service
-from app.core.auth import get_current_active_user
 
 router = APIRouter(
     prefix="/apartments",
@@ -57,10 +56,9 @@ def get_apartment(apartmentId: int, db: Session = Depends(get_db)):
 def create_apartment(
     apartment: schemas.ApartmentCreate,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id"),
-    current_user: models.User = Depends(get_current_active_user)
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
-    resolved_user_id = user_id or (current_user.id if current_user else None)
+    resolved_user_id = user_id
     return service.create_apartment(db, apartment, user_id=resolved_user_id)
 
 # POST create apartment with images
@@ -69,11 +67,10 @@ async def create_apartment_with_images(
     apartment: str = Form(...),
     files: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id"),
-    current_user: models.User = Depends(get_current_active_user)
+    user_id: int | None = Query(default=None, alias="user_id")
 ):
     apartment_data = json.loads(apartment)
-    resolved_user_id = user_id or apartment_data.get("userId") or apartment_data.get("user_id") or (current_user.id if current_user else None)
+    resolved_user_id = user_id or apartment_data.get("userId") or apartment_data.get("user_id")
     apartment_obj = schemas.ApartmentCreate(**apartment_data)
     
     # Create the apartment first
