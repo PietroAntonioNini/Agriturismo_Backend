@@ -7,6 +7,17 @@ from datetime import datetime, date
 
 from app.database import Base
 
+# Tabella per gestire il riutilizzo degli ID
+class FreeId(Base):
+    __tablename__ = "free_ids"
+
+    table_name = Column(String, primary_key=True, index=True)  # Nome della tabella
+    freed_id = Column(Integer, primary_key=True)  # ID liberato
+    freed_at = Column(DateTime, default=datetime.utcnow)
+
+    def __str__(self):
+        return f"FreeId(table={self.table_name}, id={self.freed_id})"
+
 # Enumerazioni per i tipi
 class MaintenanceType(str, enum.Enum):
     repair = "repair"
@@ -58,12 +69,46 @@ class User(Base):
     lastLogin = Column(DateTime, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
     
     # Relationship con RefreshToken
     refreshTokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
-    
+
     # Relationship con PasswordResetToken
     reset_tokens = relationship("PasswordResetToken", back_populates="user")
+
+    # Relationship con Apartments (nuova per multi-tenancy)
+    apartments = relationship("Apartment", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con MaintenanceRecords (nuova per multi-tenancy)
+    maintenance_records = relationship("MaintenanceRecord", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con Tenants (nuova per multi-tenancy)
+    tenants = relationship("Tenant", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con Leases (nuova per multi-tenancy)
+    leases = relationship("Lease", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con Invoices (nuova per multi-tenancy)
+    invoices = relationship("Invoice", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con UtilityReadings (nuova per multi-tenancy)
+    utility_readings = relationship("UtilityReading", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con LeaseDocuments (nuova per multi-tenancy)
+    lease_documents = relationship("LeaseDocument", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con LeasePayments (nuova per multi-tenancy)
+    lease_payments = relationship("LeasePayment", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con InvoiceItems (nuova per multi-tenancy)
+    invoice_items = relationship("InvoiceItem", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con PaymentRecords (nuova per multi-tenancy)
+    payment_records = relationship("PaymentRecord", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship con BillingDefaults (nuova per multi-tenancy)
+    billing_defaults = relationship("BillingDefaults", back_populates="user", cascade="all, delete-orphan")
     
     def __str__(self):
         return f"User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, active={self.isActive})"
@@ -95,6 +140,7 @@ class Apartment(Base):
     __tablename__ = "apartments"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
     floor = Column(Integer)
@@ -112,6 +158,10 @@ class Apartment(Base):
     images = Column(JSON, nullable=True)  # Array di URL di immagini
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="apartments")
 
     # Relazioni
     utilityReadings = relationship("UtilityReading", back_populates="apartment", cascade="all, delete-orphan")
@@ -123,6 +173,7 @@ class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     apartmentId = Column(Integer, ForeignKey("apartments.id"))
     type = Column(String)  # 'repair', 'inspection', 'upgrade', 'cleaning'
     description = Column(Text)
@@ -132,6 +183,10 @@ class MaintenanceRecord(Base):
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="maintenance_records")
 
     # Relazioni
     apartment = relationship("Apartment", back_populates="maintenanceRecords")
@@ -140,6 +195,7 @@ class Tenant(Base):
     __tablename__ = "tenants"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     firstName = Column(String)
     lastName = Column(String)
     email = Column(String, nullable=True)
@@ -154,6 +210,10 @@ class Tenant(Base):
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="tenants")
 
     # Relazioni
     leases = relationship("Lease", back_populates="tenant")
@@ -179,6 +239,7 @@ class Lease(Base):
     __tablename__ = "leases"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     tenantId = Column(Integer, ForeignKey("tenants.id"), nullable=False)
     apartmentId = Column(Integer, ForeignKey("apartments.id"), nullable=False)
     startDate = Column(Date)
@@ -191,6 +252,10 @@ class Lease(Base):
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="leases")
 
     # Relazioni
     tenant = relationship("Tenant", back_populates="leases")
@@ -213,6 +278,7 @@ class LeaseDocument(Base):
     __tablename__ = "lease_documents"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     leaseId = Column(Integer, ForeignKey("leases.id"))
     name = Column(String)
     type = Column(String)
@@ -220,6 +286,10 @@ class LeaseDocument(Base):
     uploadDate = Column(Date)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="lease_documents")
 
     # Relazioni
     lease = relationship("Lease", back_populates="documents")
@@ -228,6 +298,7 @@ class LeasePayment(Base):
     __tablename__ = "lease_payments"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     leaseId = Column(Integer, ForeignKey("leases.id"))
     amount = Column(Float)
     paymentDate = Column(Date)
@@ -236,6 +307,10 @@ class LeasePayment(Base):
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="lease_payments")
 
     # Relazioni
     lease = relationship("Lease", back_populates="payments")
@@ -244,6 +319,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     leaseId = Column(Integer, ForeignKey("leases.id"))
     tenantId = Column(Integer, ForeignKey("tenants.id"))
     apartmentId = Column(Integer, ForeignKey("apartments.id"))
@@ -263,6 +339,10 @@ class Invoice(Base):
     reminderDate = Column(Date, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="invoices")
 
     # Relazioni
     lease = relationship("Lease", back_populates="invoices")
@@ -275,12 +355,17 @@ class InvoiceItem(Base):
     __tablename__ = "invoice_items"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     invoiceId = Column(Integer, ForeignKey("invoices.id"))
     description = Column(String)
     amount = Column(Float)
     type = Column(String)  # 'rent', 'electricity', 'water', 'gas', 'maintenance', 'other'
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="invoice_items")
 
     # Relazioni
     invoice = relationship("Invoice", back_populates="items")
@@ -289,6 +374,7 @@ class PaymentRecord(Base):
     __tablename__ = "payment_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     invoiceId = Column(Integer, ForeignKey("invoices.id"))
     amount = Column(Float)
     paymentDate = Column(Date)
@@ -297,6 +383,10 @@ class PaymentRecord(Base):
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="payment_records")
 
     # Relazioni
     invoice = relationship("Invoice", back_populates="payments")
@@ -305,6 +395,7 @@ class UtilityReading(Base):
     __tablename__ = "utility_readings"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
 
     # Relazione con Apartment
     apartmentId = Column(Integer, ForeignKey("apartments.id"), nullable=False)
@@ -334,6 +425,14 @@ class UtilityReading(Base):
     # Eventuali note
     notes = Column(Text, nullable=True)
 
+    # Timestamp e soft delete
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="utility_readings")
+
     # Altri campi opzionali per consumi/costi specifici
     electricityConsumption = Column(Float, nullable=True)
     waterConsumption = Column(Float, nullable=True)
@@ -341,10 +440,6 @@ class UtilityReading(Base):
     electricityCost = Column(Float, nullable=True)
     waterCost = Column(Float, nullable=True)
     gasCost = Column(Float, nullable=True)
-
-    # Timestamp
-    createdAt = Column(DateTime, default=datetime.utcnow)
-    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -365,6 +460,7 @@ class BillingDefaults(Base):
     __tablename__ = "billing_defaults"
 
     id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     # Valori globali
     tari = Column(Numeric(10, 2), nullable=False, default=15.00)
     meterFee = Column(Numeric(10, 2), nullable=False, default=3.00)
@@ -377,3 +473,7 @@ class BillingDefaults(Base):
     # Audit
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updatedBy = Column(BigInteger, nullable=True)
+    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+
+    # Relazione con User (nuova per multi-tenancy)
+    user = relationship("User", back_populates="billing_defaults")

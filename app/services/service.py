@@ -1783,3 +1783,135 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
                 costs[reading.type] += reading.totalCost
     
     return costs
+
+
+# ----- ID Management Services -----
+
+def get_next_available_id(db: Session, table_name: str, user_id: int) -> int:
+    """Get the next available ID for a table, reusing deleted IDs if available."""
+    # First, try to get a freed ID
+    freed_id_record = db.query(models.FreeId).filter(
+        models.FreeId.table_name == table_name
+    ).first()
+
+    if freed_id_record:
+        # Use the freed ID
+        freed_id = freed_id_record.freed_id
+        db.delete(freed_id_record)
+        db.commit()
+        return freed_id
+    else:
+        # No freed ID available, get the next auto-increment value
+        # This is a simplified approach - in production you'd want a more robust solution
+        # For now, we'll use a simple approach that might have race conditions
+        # but works for development
+        return None  # Let the database handle auto-increment
+
+
+def free_id_for_reuse(db: Session, table_name: str, freed_id: int):
+    """Mark an ID as available for reuse when an entity is soft-deleted."""
+    # Only free IDs that are not 1 (to avoid conflicts with system IDs)
+    if freed_id > 1:
+        free_id_record = models.FreeId(
+            table_name=table_name,
+            freed_id=freed_id
+        )
+        db.add(free_id_record)
+        db.commit()
+
+
+def soft_delete_entity(db: Session, model_class, entity_id: int, user_id: int):
+    """Perform soft delete on an entity and free its ID for reuse."""
+    entity = db.query(model_class).filter(
+        model_class.id == entity_id,
+        model_class.userId == user_id,
+        model_class.deletedAt.is_(None)
+    ).first()
+
+    if not entity:
+        return None
+
+    # Soft delete
+    entity.deletedAt = datetime.utcnow()
+    db.commit()
+
+    # Free the ID for reuse
+    table_name = model_class.__tablename__
+    free_id_for_reuse(db, table_name, entity_id)
+
+    return entity
+
+
+def create_entity_with_custom_id(db: Session, model_class, data: Dict[str, Any], user_id: int) -> Any:
+    """Create an entity, potentially reusing a freed ID."""
+    # Try to get a freed ID first
+    freed_id_record = db.query(models.FreeId).filter(
+        models.FreeId.table_name == model_class.__tablename__
+    ).first()
+
+    if freed_id_record:
+        # Use the freed ID
+        custom_id = freed_id_record.freed_id
+        db.delete(freed_id_record)
+
+        # Create entity with the specific ID
+        data['id'] = custom_id
+        data['userId'] = user_id
+        entity = model_class(**data)
+        db.add(entity)
+        db.commit()
+        db.refresh(entity)
+        return entity
+    else:
+        # No freed ID, let database handle auto-increment
+        data['userId'] = user_id
+        entity = model_class(**data)
+        db.add(entity)
+        db.commit()
+        db.refresh(entity)
+        return entity
+
+
+# ----- Enhanced CRUD Operations with Multi-tenancy -----
+
+def get_entities_for_user(db: Session, model_class, user_id: int, skip: int = 0, limit: int = 100):
+    """Get all entities for a specific user (excluding soft-deleted)."""
+    return db.query(model_class).filter(
+        model_class.userId == user_id,
+        model_class.deletedAt.is_(None)
+    ).offset(skip).limit(limit).all()
+
+
+def get_entity_for_user(db: Session, model_class, entity_id: int, user_id: int):
+    """Get a specific entity for a user (excluding soft-deleted)."""
+    return db.query(model_class).filter(
+        model_class.id == entity_id,
+        model_class.userId == user_id,
+        model_class.deletedAt.is_(None)
+    ).first()
+
+
+def update_entity_for_user(db: Session, model_class, entity_id: int, update_data: Dict[str, Any], user_id: int):
+    """Update an entity for a specific user."""
+    entity = db.query(model_class).filter(
+        model_class.id == entity_id,
+        model_class.userId == user_id,
+        model_class.deletedAt.is_(None)
+    ).first()
+
+    if not entity:
+        return None
+
+    for key, value in update_data.items():
+        if hasattr(entity, key):
+            setattr(entity, key, value)
+
+    entity.updatedAt = datetime.utcnow()
+    db.commit()
+    db.refresh(entity)
+    return entity
+
+
+def delete_entity_for_user(db: Session, model_class, entity_id: int, user_id: int):
+    """Soft delete an entity for a specific user and free its ID."""
+    return soft_delete_entity(db, model_class, entity_id, user_id)
