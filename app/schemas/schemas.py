@@ -334,29 +334,34 @@ class MonthlyUtilityData(CamelCaseModel):
     year: int
     apartmentId: int
     apartmentName: str
-    electricity: float
+    electricity: float  # Solo elettricità principale
     water: float
     gas: float
-    electricityCost: float
+    electricityCost: float  # Solo costo elettricità principale
     waterCost: float
     gasCost: float
+    laundryElectricity: float  # Elettricità lavanderia
+    laundryElectricityCost: float  # Costo elettricità lavanderia
     totalCost: float
 
 class MonthlyData(CamelCaseModel):
     month: int
     monthName: str
-    electricity: float
+    electricity: float  # Solo elettricità principale
     water: float
     gas: float
-    electricityCost: float
+    electricityCost: float  # Solo costo elettricità principale
     waterCost: float
     gasCost: float
+    laundryElectricity: float  # Elettricità lavanderia
+    laundryElectricityCost: float  # Costo elettricità lavanderia
     totalCost: float
 
 class YearlyTotals(CamelCaseModel):
-    electricity: float
+    electricity: float  # Solo elettricità principale
     water: float
     gas: float
+    laundryElectricity: float  # Elettricità lavanderia
     totalCost: float
 
 class ApartmentUtilityData(CamelCaseModel):

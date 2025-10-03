@@ -213,6 +213,15 @@ def get_yearly_utility_statistics(
 ):
     return service.get_yearly_utility_statistics(db, year)
 
+# GET monthly utility data (with separated laundry electricity)
+@router.get("/monthly-data/{year}", response_model=List[schemas.MonthlyUtilityData])
+def get_monthly_utility_data(
+    year: int,
+    db: Session = Depends(get_db)
+):
+    """Get monthly utility data with separated main and laundry electricity."""
+    return service.get_yearly_utility_statistics(db, year)
+
 # GET apartment consumption by year
 @router.get("/apartment/{apartmentId}/consumption/{year}", response_model=schemas.ApartmentUtilityData)
 def get_apartment_consumption(
@@ -307,3 +316,45 @@ def create_bulk_utility_readings(
         created_readings.append(created_reading)
     
     return created_readings
+
+# GET laundry electricity cost for specific month
+@router.get("/laundry-cost/month/{apartmentId}/{year}/{month}")
+def get_laundry_electricity_cost_for_month(
+    apartmentId: int,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db)
+):
+    """Get laundry electricity cost for a specific apartment, month and year."""
+    apartment = service.get_apartment(db, apartmentId)
+    if apartment is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    cost = service.get_laundry_electricity_cost_for_month(db, apartmentId, month, year)
+    return {
+        "apartmentId": apartmentId,
+        "apartmentName": apartment.name,
+        "year": year,
+        "month": month,
+        "laundryElectricityCost": cost
+    }
+
+# GET laundry electricity cost for specific apartment and year
+@router.get("/laundry-cost/year/{apartmentId}/{year}")
+def get_laundry_electricity_cost_for_apartment(
+    apartmentId: int,
+    year: int,
+    db: Session = Depends(get_db)
+):
+    """Get total laundry electricity cost for a specific apartment and year."""
+    apartment = service.get_apartment(db, apartmentId)
+    if apartment is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
+    
+    cost = service.get_laundry_electricity_cost_for_apartment(db, apartmentId, year)
+    return {
+        "apartmentId": apartmentId,
+        "apartmentName": apartment.name,
+        "year": year,
+        "laundryElectricityCost": cost
+    }

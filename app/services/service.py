@@ -957,19 +957,27 @@ def get_yearly_utility_statistics(db: Session, year: int):
                 "year": year,
                 "apartmentId": apartmentId,
                 "apartmentName": apartment_name,
-                "electricity": 0,
+                "electricity": 0,  # Solo elettricità principale
                 "water": 0,
                 "gas": 0,
-                "electricityCost": 0,
+                "electricityCost": 0,  # Solo costo elettricità principale
                 "waterCost": 0,
                 "gasCost": 0,
+                "laundryElectricity": 0,  # Elettricità lavanderia
+                "laundryElectricityCost": 0,  # Costo elettricità lavanderia
                 "totalCost": 0
             }
         
-        # Add consumption and cost based on type
+        # Add consumption and cost based on type and subtype
         if str(reading.type) == "electricity":
-            stats_dict[key]["electricity"] += reading.consumption
-            stats_dict[key]["electricityCost"] += reading.totalCost
+            if reading.subtype == "laundry":
+                # Elettricità lavanderia
+                stats_dict[key]["laundryElectricity"] += reading.consumption
+                stats_dict[key]["laundryElectricityCost"] += reading.totalCost
+            else:
+                # Elettricità principale (main o None)
+                stats_dict[key]["electricity"] += reading.consumption
+                stats_dict[key]["electricityCost"] += reading.totalCost
         elif str(reading.type) == "water":
             stats_dict[key]["water"] += reading.consumption
             stats_dict[key]["waterCost"] += reading.totalCost
@@ -1009,22 +1017,30 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
                 "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
                 "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
             ][month - 1],
-            "electricity": 0,
+            "electricity": 0,  # Solo elettricità principale
             "water": 0,
             "gas": 0,
-            "electricityCost": 0,
+            "electricityCost": 0,  # Solo costo elettricità principale
             "waterCost": 0,
             "gasCost": 0,
+            "laundryElectricity": 0,  # Elettricità lavanderia
+            "laundryElectricityCost": 0,  # Costo elettricità lavanderia
             "totalCost": 0
         }
     
     for reading in readings:
         month = reading.readingDate.month
         
-        # Add consumption and cost based on type
+        # Add consumption and cost based on type and subtype
         if str(reading.type) == "electricity":
-            monthly_data[month]["electricity"] += reading.consumption
-            monthly_data[month]["electricityCost"] += reading.totalCost
+            if reading.subtype == "laundry":
+                # Elettricità lavanderia
+                monthly_data[month]["laundryElectricity"] += reading.consumption
+                monthly_data[month]["laundryElectricityCost"] += reading.totalCost
+            else:
+                # Elettricità principale (main o None)
+                monthly_data[month]["electricity"] += reading.consumption
+                monthly_data[month]["electricityCost"] += reading.totalCost
         elif str(reading.type) == "water":
             monthly_data[month]["water"] += reading.consumption
             monthly_data[month]["waterCost"] += reading.totalCost
@@ -1039,6 +1055,7 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
         "electricity": sum(month["electricity"] for month in monthly_data.values()),
         "water": sum(month["water"] for month in monthly_data.values()),
         "gas": sum(month["gas"] for month in monthly_data.values()),
+        "laundryElectricity": sum(month["laundryElectricity"] for month in monthly_data.values()),
         "totalCost": sum(month["totalCost"] for month in monthly_data.values())
     }
     
@@ -1849,6 +1866,29 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
                 costs[reading.type] += reading.totalCost
     
     return costs
+
+def get_laundry_electricity_cost_for_month(db: Session, apartment_id: int, month: int, year: int):
+    """Get laundry electricity cost for a specific apartment, month and year."""
+    readings = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartment_id,
+        models.UtilityReading.type == "electricity",
+        models.UtilityReading.subtype == "laundry",
+        models.UtilityReading.readingDate >= date(year, month, 1),
+        models.UtilityReading.readingDate <= date(year, month, 28) + timedelta(days=4)
+    ).all()
+    
+    return sum(reading.totalCost for reading in readings)
+
+def get_laundry_electricity_cost_for_apartment(db: Session, apartment_id: int, year: int):
+    """Get total laundry electricity cost for a specific apartment and year."""
+    readings = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartment_id,
+        models.UtilityReading.type == "electricity",
+        models.UtilityReading.subtype == "laundry",
+        func.extract('year', models.UtilityReading.readingDate) == year
+    ).all()
+    
+    return sum(reading.totalCost for reading in readings)
 
 
 # ----- ID Management Services -----
