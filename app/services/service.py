@@ -1803,6 +1803,9 @@ def get_lease_invoices(
 
 def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: int):
     """Calculate utility costs for a specific month and year."""
+    # Get the apartment to check its name
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    
     # Get utility readings for the month
     readings = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartment_id,
@@ -1816,8 +1819,11 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
         "gas": 0.0
     }
     
-    # Special handling for apartment 8 (ID 11) - separate electricity main and laundry
-    if apartment_id == 11:  # Appartamento 8
+    # Special handling for "Appartamento 8" - separate electricity main and laundry
+    # Check by name instead of ID (more reliable across environments)
+    is_apartment_8 = apartment and apartment.name == "Appartamento 8"
+    
+    if is_apartment_8:
         electricity_main = 0.0
         electricity_laundry = 0.0
         
