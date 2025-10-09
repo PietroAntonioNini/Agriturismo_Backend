@@ -69,15 +69,16 @@ def create_lease(
 def update_lease(
     leaseId: int,
     lease: schemas.LeaseCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_lease = service.get_lease(db, leaseId)
+    existing_lease = service.get_lease(db, leaseId, current_user.id)
     if existing_lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
     # Se cambia l'appartamento, verifica che il nuovo sia disponibile
     if lease.apartmentId != existing_lease.apartmentId:
-        new_apartment = service.get_apartment(db, lease.apartmentId)
+        new_apartment = service.get_apartment(db, lease.apartmentId, current_user.id)
         if not new_apartment:
             raise HTTPException(status_code=404, detail="New apartment not found")
         if new_apartment.status != "available":
@@ -93,8 +94,8 @@ def update_lease(
 
 # DELETE lease
 @router.delete("/{leaseId}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_lease(leaseId: int, db: Session = Depends(get_db)):
-    existing_lease = service.get_lease(db, leaseId)
+def delete_lease(leaseId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    existing_lease = service.get_lease(db, leaseId, current_user.id)
     if existing_lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
@@ -109,9 +110,10 @@ def delete_lease(leaseId: int, db: Session = Depends(get_db)):
 def terminate_lease(
     leaseId: int,
     termination_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_lease = service.get_lease(db, leaseId)
+    existing_lease = service.get_lease(db, leaseId, current_user.id)
     if existing_lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     

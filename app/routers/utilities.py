@@ -127,8 +127,8 @@ def update_utility_reading(
 
 # DELETE utility reading
 @router.delete("/{reading_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_utility_reading(reading_id: int, db: Session = Depends(get_db)):
-    existing_reading = service.get_utility_reading(db, reading_id)
+def delete_utility_reading(reading_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    existing_reading = service.get_utility_reading(db, reading_id, user_id=current_user.id)
     if existing_reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
     

@@ -61,12 +61,10 @@ def get_invoice(
 def create_invoice(
     invoice: schemas.InvoiceCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
     """Create a new invoice"""
-    resolved_user_id = user_id or current_user.id
-    return service.create_invoice(db, invoice, user_id=resolved_user_id)
+    return service.create_invoice(db, invoice, user_id=current_user.id)
 
 # PUT update invoice
 @router.put("/{invoice_id}", response_model=schemas.Invoice)

@@ -59,10 +59,9 @@ def get_apartment(apartmentId: int, db: Session = Depends(get_db), current_user:
 def create_apartment(
     apartment: schemas.ApartmentCreate,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    resolved_user_id = user_id
-    return service.create_apartment(db, apartment, user_id=resolved_user_id)
+    return service.create_apartment(db, apartment, user_id=current_user.id)
 
 # POST create apartment with images
 @router.post("/with-images", response_model=schemas.Apartment, status_code=status.HTTP_201_CREATED)
@@ -70,14 +69,13 @@ async def create_apartment_with_images(
     apartment: str = Form(...),
     files: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
     apartment_data = json.loads(apartment)
-    resolved_user_id = user_id or apartment_data.get("userId") or apartment_data.get("user_id")
     apartment_obj = schemas.ApartmentCreate(**apartment_data)
     
     # Create the apartment first
-    new_apartment = service.create_apartment(db, apartment_obj, user_id=resolved_user_id)
+    new_apartment = service.create_apartment(db, apartment_obj, user_id=current_user.id)
     
     # Handle file uploads if any
     if files:
@@ -92,9 +90,10 @@ async def create_apartment_with_images(
 def update_apartment(
     apartmentId: int,
     apartment: schemas.ApartmentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_apartment = service.get_apartment(db, apartmentId)
+    existing_apartment = service.get_apartment(db, apartmentId, current_user.id)
     if existing_apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     return service.update_apartment(db, apartmentId, apartment)
@@ -105,9 +104,10 @@ async def update_apartment_with_images(
     apartmentId: int,
     apartment: str = Form(...),
     files: List[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_apartment = service.get_apartment(db, apartmentId)
+    existing_apartment = service.get_apartment(db, apartmentId, current_user.id)
     if existing_apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
@@ -128,14 +128,14 @@ async def update_apartment_with_images(
     if sync_result and sync_result["removed_orphaned_images"]:
         print(f"Sincronizzate immagini durante aggiornamento appartamento {apartmentId}: rimossi {len(sync_result['removed_orphaned_images'])} riferimenti orfani")
         # Ricarica l'appartamento dopo la sincronizzazione
-        updated_apartment = service.get_apartment(db, apartmentId)
+        updated_apartment = service.get_apartment(db, apartmentId, current_user.id)
     
     return updated_apartment
 
 # DELETE apartment
 @router.delete("/{apartmentId}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_apartment(apartmentId: int, db: Session = Depends(get_db)):
-    existing_apartment = service.get_apartment(db, apartmentId)
+def delete_apartment(apartmentId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    existing_apartment = service.get_apartment(db, apartmentId, current_user.id)
     if existing_apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
