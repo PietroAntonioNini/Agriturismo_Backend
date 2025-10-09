@@ -9,6 +9,8 @@ from app.models import models
 from app.schemas import schemas
 from app.services import service
 
+from app.core.auth import get_current_active_user
+
 router = APIRouter(
     prefix="/leases",
     tags=["leases"]
@@ -23,14 +25,14 @@ def get_leases(
     tenantId: Optional[int] = None,
     apartmentId: Optional[int] = None,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.get_leases(db, skip, limit, status, tenantId, apartmentId, user_id)
+    return service.get_leases(db, skip, limit, status, tenantId, apartmentId, current_user.id)
 
 # GET lease by ID
 @router.get("/{leaseId}", response_model=schemas.Lease)
-def get_lease(leaseId: int, db: Session = Depends(get_db), user_id: int | None = Query(default=None, alias="user_id")):
-    lease = service.get_lease(db, leaseId, user_id)
+def get_lease(leaseId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    lease = service.get_lease(db, leaseId, current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     return lease
@@ -40,10 +42,10 @@ def get_lease(leaseId: int, db: Session = Depends(get_db), user_id: int | None =
 def create_lease(
     lease: schemas.LeaseCreate,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
     # Verifica che l'appartamento esista e sia disponibile
-    apartment = service.get_apartment(db, lease.apartmentId)
+    apartment = service.get_apartment(db, lease.apartmentId, current_user.id)
     if not apartment:
         raise HTTPException(status_code=404, detail="Apartment not found")
     if apartment.status != "available":
@@ -55,7 +57,7 @@ def create_lease(
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     # Crea il contratto
-    db_lease = service.create_lease(db, lease, user_id=user_id)
+    db_lease = service.create_lease(db, lease, user_id=current_user.id)
     
     # Aggiorna lo stato dell'appartamento a "occupied"
     service.update_apartment_status(db, lease.apartmentId, "occupied")

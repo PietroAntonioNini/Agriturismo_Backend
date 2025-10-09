@@ -25,9 +25,10 @@ def get_utility_readings(
     year: Optional[int] = None,
     month: Optional[int] = None,
     isPaid: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.get_utility_readings(db, skip, limit, apartmentId, type, subtype, year, month, isPaid)
+    return service.get_utility_readings(db, skip, limit, apartmentId, type, subtype, year, month, isPaid, user_id=current_user.id)
 
 # GET utility type configurations
 @router.get("/types", response_model=List[schemas.UtilityTypeConfig])

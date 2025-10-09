@@ -14,6 +14,8 @@ from app.models import models
 from app.schemas import schemas
 from app.services import service
 
+from app.core.auth import get_current_active_user
+
 router = APIRouter(
     prefix="/tenants",
     tags=["tenants"]
@@ -25,14 +27,14 @@ def get_tenants(
     skip: int = 0, 
     limit: int = 100,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.get_tenants(db, skip=skip, limit=limit, user_id=user_id)
+    return service.get_tenants(db, skip=skip, limit=limit, user_id=current_user.id)
 
 # GET tenant by ID
 @router.get("/{tenantId}", response_model=schemas.Tenant)
-def get_tenant(tenantId: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenantId=tenantId)
+def get_tenant(tenantId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    tenant = service.get_tenant(db, tenantId=tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -41,7 +43,7 @@ def get_tenant(tenantId: int, db: Session = Depends(get_db)):
     if sync_result and sync_result["removed_orphaned_documents"]:
         print(f"Sincronizzati documenti per tenant {tenantId}: rimossi {len(sync_result['removed_orphaned_documents'])} riferimenti orfani")
         # Ricarica il tenant dopo la sincronizzazione
-        tenant = service.get_tenant(db, tenantId=tenantId)
+        tenant = service.get_tenant(db, tenantId=tenantId, user_id=current_user.id)
     
     return tenant
 

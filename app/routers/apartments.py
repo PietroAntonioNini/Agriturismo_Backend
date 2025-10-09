@@ -11,6 +11,8 @@ from app.models import models
 from app.schemas import schemas
 from app.services import service
 
+from app.core.auth import get_current_active_user
+
 router = APIRouter(
     prefix="/apartments",
     tags=["apartments"]
@@ -29,17 +31,17 @@ def get_apartments(
     hasParking: Optional[bool] = None,
     isFurnished: Optional[bool] = None,
     db: Session = Depends(get_db),
-    user_id: int | None = Query(default=None, alias="user_id")
+    current_user: models.User = Depends(get_current_active_user)
 ):
     return service.get_apartments(
         db, skip, limit, status, floor,
-        minRooms, maxPrice, hasBalcony, hasParking, isFurnished, user_id
+        minRooms, maxPrice, hasBalcony, hasParking, isFurnished, current_user.id
     )
 
 # GET apartment by ID
 @router.get("/{apartmentId}", response_model=schemas.Apartment)
-def get_apartment(apartmentId: int, db: Session = Depends(get_db), user_id: int | None = Query(default=None, alias="user_id")):
-    apartment = service.get_apartment(db, apartmentId, user_id)
+def get_apartment(apartmentId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    apartment = service.get_apartment(db, apartmentId, current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
