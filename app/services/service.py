@@ -850,6 +850,31 @@ def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: 
     
     return query.order_by(models.UtilityReading.readingDate.desc()).first()
 
+def get_previous_utility_reading_for_chain(
+    db: Session,
+    *,
+    apartmentId: int,
+    type: str,
+    subtype: Optional[str],
+    readingDate: date,
+    exclude_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+):
+    query = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartmentId,
+        models.UtilityReading.type == type,
+        models.UtilityReading.readingDate < readingDate,
+    )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    if subtype is not None:
+        query = query.filter(models.UtilityReading.subtype == subtype)
+    if exclude_id is not None:
+        query = query.filter(models.UtilityReading.id != exclude_id)
+    if hasattr(models.UtilityReading, "deletedAt"):
+        query = query.filter(models.UtilityReading.deletedAt.is_(None))
+    return query.order_by(models.UtilityReading.readingDate.desc()).first()
+
 def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate, user_id: Optional[int] = None):
     """Create a new utility reading."""
     data = reading.dict()
@@ -862,15 +887,56 @@ def create_utility_reading(db: Session, reading: schemas.UtilityReadingCreate, u
     return db_reading
 
 def update_utility_reading(db: Session, reading_id: int, reading: schemas.UtilityReadingCreate):
-    """Update an existing utility reading."""
     db_reading = db.query(models.UtilityReading).filter(models.UtilityReading.id == reading_id).first()
-    if db_reading:
-        for key, value in reading.dict().items():
-            setattr(db_reading, key, value)
-        
-        setattr(db_reading, "updatedAt", datetime.utcnow())
-        db.commit()
-        db.refresh(db_reading)
+    if not db_reading:
+        return None
+
+    update_data = reading.dict()
+    for key, value in update_data.items():
+        setattr(db_reading, key, value)
+
+    prev = get_previous_utility_reading_for_chain(
+        db,
+        apartmentId=db_reading.apartmentId,
+        type=db_reading.type,
+        subtype=db_reading.subtype,
+        readingDate=db_reading.readingDate,
+        exclude_id=reading_id,
+        user_id=db_reading.userId,
+    )
+    db_reading.previousReading = prev.currentReading if prev else 0.0
+
+    if db_reading.currentReading < db_reading.previousReading:
+        raise HTTPException(status_code=400, detail=f"Current reading must be >= previous ({db_reading.previousReading})")
+
+    db_reading.consumption = db_reading.currentReading - db_reading.previousReading
+    db_reading.totalCost = db_reading.consumption * db_reading.unitCost
+    db_reading.updatedAt = datetime.utcnow()
+
+    cascade_q = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == db_reading.apartmentId,
+        models.UtilityReading.type == db_reading.type,
+        models.UtilityReading.readingDate > db_reading.readingDate,
+        models.UtilityReading.userId == db_reading.userId,
+    )
+    if db_reading.subtype is not None:
+        cascade_q = cascade_q.filter(models.UtilityReading.subtype == db_reading.subtype)
+    if hasattr(models.UtilityReading, "deletedAt"):
+        cascade_q = cascade_q.filter(models.UtilityReading.deletedAt.is_(None))
+    subsequent_readings = cascade_q.order_by(models.UtilityReading.readingDate.asc()).all()
+
+    prev_current = db_reading.currentReading
+    for r in subsequent_readings:
+        r.previousReading = prev_current
+        if r.currentReading < r.previousReading:
+            raise HTTPException(status_code=400, detail=f"Reading {r.id}: current ({r.currentReading}) < previous ({r.previousReading}) after cascade")
+        r.consumption = r.currentReading - r.previousReading
+        r.totalCost = r.consumption * r.unitCost
+        r.updatedAt = datetime.utcnow()
+        prev_current = r.currentReading
+
+    db.commit()
+    db.refresh(db_reading)
     return db_reading
 
 def delete_utility_reading(db: Session, reading_id: int):

@@ -61,10 +61,14 @@ def get_utility_types():
         }
     ]
 
-# GET utility reading by ID
+# GET utility reading by ID (scoped to current user)
 @router.get("/{reading_id}", response_model=schemas.UtilityReading)
-def get_utility_reading(reading_id: int, db: Session = Depends(get_db)):
-    reading = service.get_utility_reading(db, reading_id)
+def get_utility_reading(
+    reading_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    reading = service.get_utility_reading(db, reading_id, user_id=current_user.id)
     if reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
     return reading
@@ -116,12 +120,6 @@ def update_utility_reading(
     existing_reading = service.get_utility_reading(db, reading_id, user_id=current_user.id)
     if existing_reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
-    
-    # Calcola il consumo
-    reading.consumption = reading.currentReading - reading.previousReading
-    
-    # Calcola il costo totale
-    reading.totalCost = reading.consumption * reading.unitCost
     
     return service.update_utility_reading(db, reading_id, reading)
 
