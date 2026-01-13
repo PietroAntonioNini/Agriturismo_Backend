@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "no-reply@agriturismo.com")
     sendgrid_from_name: str = os.getenv("SENDGRID_FROM_NAME", "Agriturismo Support")
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:4200")
+    
+    # Email provider (smtp, sendgrid)
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "sendgrid")
+    
+    # SMTP settings (per Gmail, Outlook, ecc.)
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("SMTP_USERNAME", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "True").lower() == "true"
+    
+    # Email comune (usato per SMTP e SendGrid)
+    from_email: str = os.getenv("FROM_EMAIL", sendgrid_from_email)
+    from_name: str = os.getenv("FROM_NAME", sendgrid_from_name)
+    
     # Password reset settings
     password_reset_token_expire_hours: int = int(os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_HOURS", "24"))
     # Configurazioni per rate limiting specifici per reset password
