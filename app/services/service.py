@@ -1873,9 +1873,13 @@ def send_bulk_reminders(db: Session, data: dict, user_id: Optional[int] = None):
             if not query.first():
                 failed_count += 1
                 continue
+            
+            reminder_data = {
+                "send_via": send_via,
+                "template": template,
                 "message": custom_message
             }
-            result = send_invoice_reminder(db, invoice_id, reminder_data)
+            result = send_invoice_reminder(db, invoice_id, reminder_data, user_id=user_id)
             
             if result and result.get('success'):
                 sent_count += 1
