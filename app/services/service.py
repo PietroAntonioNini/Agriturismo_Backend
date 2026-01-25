@@ -1810,7 +1810,6 @@ def get_invoice_statistics(db: Session, period: str = "this_month", user_id: Opt
     if user_id is not None:
         query = query.filter(models.Invoice.userId == user_id)
     invoices = query.all()
-    ).all()
     
     total_invoiced = sum(inv.total for inv in invoices)
     total_paid = sum(inv.total for inv in invoices if inv.isPaid)
