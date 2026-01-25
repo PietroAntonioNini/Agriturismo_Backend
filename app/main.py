@@ -246,10 +246,19 @@ async def security_headers_middleware(request: Request, call_next):
     
     # Se è un endpoint scoped all'utente, disabilita il caching
     if any(request.url.path.startswith(path) for path in user_scoped_paths):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         response.headers["Vary"] = "Authorization"  # Fondamentale per HTTP caching proxies
+        # Forza il browser a non cachare e a rivalidare sempre
+        response.headers["ETag"] = ""  # Rimuovi ETag per forzare la revalidazione
+    
+    # Headers per auth endpoints - molto importante che non vengano mai cachati
+    if "/auth/" in request.url.path or "/login" in request.url.path or "/logout" in request.url.path:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["Vary"] = "Authorization"
     
     # X-Content-Type-Options: previene MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -259,6 +268,9 @@ async def security_headers_middleware(request: Request, call_next):
     
     # X-XSS-Protection: abilita protezione XSS nel browser
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    
+    # Content-Security-Policy
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;"
     
     return response
 
