@@ -196,21 +196,23 @@ def get_last_utility_reading_by_type(
 def get_utility_summary(
     apartmentId: int,
     year: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
-    return service.get_utility_summary(db, apartmentId, year)
+    return service.get_utility_summary(db, apartmentId, year, user_id=current_user.id)
 
 # GET yearly utility statistics
 @router.get("/statistics/{year}", response_model=List[schemas.MonthlyUtilityData])
 def get_yearly_utility_statistics(
     year: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.get_yearly_utility_statistics(db, year)
+    return service.get_yearly_utility_statistics(db, year, user_id=current_user.id)
 
 # GET monthly utility data (with separated laundry electricity)
 @router.get("/monthly-data/{year}", response_model=List[schemas.MonthlyUtilityData])
@@ -226,26 +228,31 @@ def get_monthly_utility_data(
 def get_apartment_consumption(
     apartmentId: int,
     year: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
-    return service.get_apartment_consumption(db, apartmentId, year)
+    return service.get_apartment_consumption(db, apartmentId, year, user_id=current_user.id)
 
 # GET unpaid utility readings
 @router.get("/unpaid/list", response_model=List[schemas.UtilityReading])
-def get_unpaid_utility_readings(db: Session = Depends(get_db)):
-    return service.get_utility_readings(db, isPaid=False)
+def get_unpaid_utility_readings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    return service.get_utility_readings(db, isPaid=False, user_id=current_user.id)
 
 # GET utility statistics
 @router.get("/statistics/overview", response_model=schemas.UtilityStatistics)
 def get_utility_statistics_overview(
     year: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.get_utility_statistics_overview(db, year)
+    return service.get_utility_statistics_overview(db, year, user_id=current_user.id)
 
 # GET last reading for apartment and type (for form auto-completion)
 @router.get("/last-reading/{apartmentId}/{type}", response_model=schemas.LastReading)
@@ -253,9 +260,10 @@ def get_last_reading_info(
     apartmentId: int,
     type: str,
     subtype: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     

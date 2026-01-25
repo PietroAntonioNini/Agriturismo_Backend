@@ -177,21 +177,22 @@ async def add_lease_document(
 
 # GET lease documents
 @router.get("/{leaseId}/documents", response_model=List[schemas.LeaseDocument])
-def get_lease_documents(leaseId: int, db: Session = Depends(get_db)):
-    lease = service.get_lease(db, leaseId)
+def get_lease_documents(leaseId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    lease = service.get_lease(db, leaseId, user_id=current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
-    return service.get_lease_documents(db, leaseId)
+    return service.get_lease_documents(db, leaseId, user_id=current_user.id)
 
 # DELETE lease document
 @router.delete("/{leaseId}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lease_document(
     leaseId: int,
     document_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    lease = service.get_lease(db, leaseId)
+    lease = service.get_lease(db, leaseId, user_id=current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
@@ -207,9 +208,10 @@ def delete_lease_document(
 def record_lease_payment(
     leaseId: int,
     payment: schemas.LeasePaymentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    lease = service.get_lease(db, leaseId)
+    lease = service.get_lease(db, leaseId, user_id=current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
@@ -217,20 +219,21 @@ def record_lease_payment(
 
 # GET lease payments
 @router.get("/{leaseId}/payments", response_model=List[schemas.LeasePayment])
-def get_lease_payments(leaseId: int, db: Session = Depends(get_db)):
-    lease = service.get_lease(db, leaseId)
+def get_lease_payments(leaseId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    lease = service.get_lease(db, leaseId, user_id=current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
-    return service.get_lease_payments(db, leaseId)
+    return service.get_lease_payments(db, leaseId, user_id=current_user.id)
 
 # GET search leases
 @router.get("/search/", response_model=List[schemas.Lease])
 def search_leases(
     q: str = Query(..., min_length=2),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.search_leases(db, q)
+    return service.search_leases(db, q, user_id=current_user.id)
 
 # GET lease's invoices
 @router.get("/{leaseId}/invoices", response_model=List[schemas.Invoice])
@@ -239,9 +242,10 @@ def get_lease_invoices(
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    lease = service.get_lease(db, leaseId)
+    lease = service.get_lease(db, leaseId, user_id=current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
-    return service.get_lease_invoices(db, leaseId, isPaid, year, month)
+    return service.get_lease_invoices(db, leaseId, isPaid, year, month, user_id=current_user.id)

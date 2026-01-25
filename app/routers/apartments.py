@@ -179,11 +179,11 @@ def update_apartment_status(
 
 # GET apartment's tenants
 @router.get("/{apartmentId}/tenants", response_model=List[schemas.Tenant])
-def get_apartment_tenants(apartmentId: int, db: Session = Depends(get_db)):
-    apartment = service.get_apartment(db, apartmentId)
+def get_apartment_tenants(apartmentId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_tenants(db, apartmentId)
+    return service.get_apartment_tenants(db, apartmentId, user_id=current_user.id)
 
 # GET apartment's utility readings
 @router.get("/{apartmentId}/utilities", response_model=List[schemas.UtilityReading])
@@ -193,12 +193,13 @@ def get_apartment_utilities(
     subtype: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_utilities(db, apartmentId, type, subtype, year, month)
+    return service.get_apartment_utilities(db, apartmentId, type, subtype, year, month, user_id=current_user.id)
 
 # GET apartment's maintenance records
 @router.get("/{apartmentId}/maintenance", response_model=List[schemas.MaintenanceRecord])
@@ -207,24 +208,26 @@ def get_apartment_maintenance(
     type: Optional[str] = None,
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_maintenance(db, apartmentId, type, from_date, to_date)
+    return service.get_apartment_maintenance(db, apartmentId, type, from_date, to_date, user_id=current_user.id)
 
 # GET apartment's leases
 @router.get("/{apartmentId}/leases", response_model=List[schemas.Lease])
 def get_apartment_leases(
     apartmentId: int,
     isActive: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_leases(db, apartmentId, isActive)
+    return service.get_apartment_leases(db, apartmentId, isActive, user_id=current_user.id)
 
 # GET apartment's invoices
 @router.get("/{apartmentId}/invoices", response_model=List[schemas.Invoice])
@@ -233,21 +236,23 @@ def get_apartment_invoices(
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
-    return service.get_apartment_invoices(db, apartmentId, isPaid, year, month)
+    return service.get_apartment_invoices(db, apartmentId, isPaid, year, month, user_id=current_user.id)
 
 # POST upload apartment image
 @router.post("/{apartmentId}/images", response_model=dict)
 async def upload_apartment_image(
     apartmentId: int,
     image: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    apartment = service.get_apartment(db, apartmentId)
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
     if apartment is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
@@ -258,6 +263,15 @@ async def upload_apartment_image(
 
 # DELETE apartment image
 @router.delete("/{apartmentId}/images/{image_name}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_apartment_image(
+    apartmentId: int,
+    image_name: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    apartment = service.get_apartment(db, apartmentId, user_id=current_user.id)
+    if apartment is None:
+        raise HTTPException(status_code=404, detail="Apartment not found")
 def delete_apartment_image(
     apartmentId: int,
     image_name: str,

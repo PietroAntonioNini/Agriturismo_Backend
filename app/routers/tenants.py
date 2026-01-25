@@ -112,7 +112,7 @@ async def create_tenant_with_images(
             db = next(get_db())
             
             # Ricaricare il tenant per assicurarsi di avere la versione più aggiornata
-            new_tenant = service.get_tenant(db, new_tenant.id)
+            new_tenant = service.get_tenant(db, new_tenant.id, user_id=current_user.id)
             
             return new_tenant
             
@@ -151,7 +151,7 @@ def update_tenant(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_tenant = service.get_tenant(db, tenantId, current_user.id)
+    existing_tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return service.update_tenant(db, tenantId, tenant)
@@ -167,7 +167,7 @@ async def update_tenant_with_images(
     current_user: models.User = Depends(get_current_active_user)
 ):
     try:
-        existing_tenant = service.get_tenant(db, tenantId, current_user.id)
+        existing_tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
         if existing_tenant is None:
             raise HTTPException(status_code=404, detail="Tenant non trovato")
         
@@ -201,7 +201,7 @@ async def update_tenant_with_images(
         if sync_result and sync_result["removed_orphaned_documents"]:
             print(f"Sincronizzati documenti durante aggiornamento tenant {tenantId}: rimossi {len(sync_result['removed_orphaned_documents'])} riferimenti orfani")
             # Ricarica il tenant dopo la sincronizzazione
-            updated_tenant = service.get_tenant(db, tenantId)
+            updated_tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
         
         return updated_tenant
         
@@ -213,9 +213,9 @@ async def update_tenant_with_images(
 
 # POST sync tenant documents with filesystem
 @router.post("/{tenantId}/sync-documents", response_model=dict)
-def sync_tenant_documents(tenantId: int, db: Session = Depends(get_db)):
+def sync_tenant_documents(tenantId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
     """Sincronizza i documenti del tenant nel database con quelli fisicamente presenti nel filesystem."""
-    tenant = service.get_tenant(db, tenantId)
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -311,7 +311,7 @@ async def download_tenant_document(
 # DELETE tenant
 @router.delete("/{tenantId}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tenant(tenantId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    existing_tenant = service.get_tenant(db, tenantId, current_user.id)
+    existing_tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     service.delete_tenant(db, tenantId)
@@ -325,7 +325,7 @@ def update_communication_preferences(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_user)
 ):
-    existing_tenant = service.get_tenant(db, tenantId, current_user.id)
+    existing_tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if existing_tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return service.update_tenant_communication_preferences(db, tenantId, preferences)
@@ -335,20 +335,21 @@ def update_communication_preferences(
 def get_tenant_leases(
     tenantId: int,
     isActive: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    tenant = service.get_tenant(db, tenantId)
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_leases(db, tenantId, isActive)
+    return service.get_tenant_leases(db, tenantId, isActive, user_id=current_user.id)
 
 # GET tenant's active leases
 @router.get("/{tenantId}/active-leases", response_model=List[schemas.Lease])
-def get_tenant_active_leases(tenantId: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenantId)
+def get_tenant_active_leases(tenantId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_leases(db, tenantId, isActive=True)
+    return service.get_tenant_leases(db, tenantId, isActive=True, user_id=current_user.id)
 
 # GET tenant's invoices
 @router.get("/{tenantId}/invoices", response_model=List[schemas.Invoice])
@@ -357,20 +358,21 @@ def get_tenant_invoices(
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    tenant = service.get_tenant(db, tenantId)
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_invoices(db, tenantId, isPaid, year, month)
+    return service.get_tenant_invoices(db, tenantId, isPaid, year, month, user_id=current_user.id)
 
 # GET tenant's payment history
 @router.get("/{tenantId}/payment-history", response_model=List[schemas.PaymentRecord])
-def get_tenant_payment_history(tenantId: int, db: Session = Depends(get_db)):
-    tenant = service.get_tenant(db, tenantId)
+def get_tenant_payment_history(tenantId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return service.get_tenant_payment_history(db, tenantId)
+    return service.get_tenant_payment_history(db, tenantId, user_id=current_user.id)
 
 # POST upload tenant document
 @router.post("/{tenantId}/documents/{doc_type}", response_model=schemas.DocumentResponse)
@@ -378,9 +380,10 @@ async def upload_tenant_document(
     tenantId: int,
     doc_type: str,
     image: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    tenant = service.get_tenant(db, tenantId)
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant non trovato")
     
@@ -410,21 +413,22 @@ async def upload_tenant_document(
 @router.get("/search/", response_model=List[schemas.Tenant])
 def search_tenants(
     q: str = Query(..., min_length=2),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    return service.search_tenants(db, q)
+    return service.search_tenants(db, q, user_id=current_user.id)
 
 # DELETE tenant document
 @router.delete("/{tenantId}/documents/{doc_type}", response_model=schemas.DocumentResponse)
 async def delete_tenant_document(
     tenantId: int,
     doc_type: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    if doc_type not in ["front", "back"]:
-        raise HTTPException(status_code=400, detail="Il tipo di documento deve essere 'front' o 'back'")
-    
-    result = await service.delete_tenant_document(db, tenantId, doc_type)
+    tenant = service.get_tenant(db, tenantId, user_id=current_user.id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     return {
         "success": True,
         "detail": "Documento eliminato con successo",

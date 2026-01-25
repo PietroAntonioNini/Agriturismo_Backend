@@ -128,7 +128,7 @@ def get_invoice_payment_records(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Get all payment records for an invoice"""
-    records = service.get_invoice_payment_records(db, invoice_id)
+    records = service.get_invoice_payment_records(db, invoice_id, user_id=current_user.id)
     if records is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return records
@@ -142,7 +142,7 @@ def send_invoice_reminder(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Send a reminder for an invoice"""
-    result = service.send_invoice_reminder(db, invoice_id, reminder_data)
+    result = service.send_invoice_reminder(db, invoice_id, reminder_data, user_id=current_user.id)
     if result is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return result
@@ -156,7 +156,7 @@ def get_overdue_invoices(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Get overdue invoices"""
-    return service.get_overdue_invoices(db, days_overdue, include_tenant_info)
+    return service.get_overdue_invoices(db, days_overdue, include_tenant_info, user_id=current_user.id)
 
 # POST generate monthly invoices
 @router.post("/generate-monthly")
@@ -186,7 +186,7 @@ def get_invoice_statistics(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Get invoice statistics and KPI"""
-    return service.get_invoice_statistics(db, period)
+    return service.get_invoice_statistics(db, period, user_id=current_user.id)
 
 # GET invoice PDF
 @router.get("/{invoice_id}/pdf")
@@ -214,4 +214,4 @@ def send_bulk_reminders(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Send reminders for multiple invoices"""
-    return service.send_bulk_reminders(db, data) 
+    return service.send_bulk_reminders(db, data, user_id=current_user.id) 

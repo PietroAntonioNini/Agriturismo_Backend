@@ -198,12 +198,16 @@ def get_available_apartments(db: Session):
         models.Apartment.status == "available"
     ).all()
 
-def get_apartment_tenants(db: Session, apartmentId: int):
+def get_apartment_tenants(db: Session, apartmentId: int, user_id: Optional[int] = None):
     """Get all tenants associated with an apartment through active leases."""
-    # Query tenants through leases
-    leases = db.query(models.Lease).filter(
+    # Query tenants through leases, filtered by apartment and user
+    query = db.query(models.Lease).filter(
         models.Lease.apartmentId == apartmentId
-    ).all()
+    )
+    if user_id is not None:
+        query = query.filter(models.Lease.userId == user_id)
+    
+    leases = query.all()
     
     # Filter for active leases in Python
     active_leases = [lease for lease in leases if lease.isActive]
@@ -222,12 +226,15 @@ def get_apartment_utilities(
     type: Optional[str] = None,
     subtype: Optional[str] = None,
     year: Optional[int] = None,
-    month: Optional[int] = None
+    month: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """Get utility readings for an apartment with optional filters."""
     query = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId
     )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
     
     if type:
         query = query.filter(models.UtilityReading.type == type)
@@ -252,12 +259,15 @@ def get_apartment_maintenance(
     apartmentId: int, 
     type: Optional[str] = None,
     fromDate: Optional[datetime] = None,
-    toDate: Optional[datetime] = None
+    toDate: Optional[datetime] = None,
+    user_id: Optional[int] = None
 ):
     """Get maintenance records for an apartment with optional filters."""
     query = db.query(models.MaintenanceRecord).filter(
         models.MaintenanceRecord.apartmentId == apartmentId
     )
+    if user_id is not None:
+        query = query.filter(models.MaintenanceRecord.userId == user_id)
     
     if type:
         query = query.filter(models.MaintenanceRecord.type == type)
@@ -273,12 +283,15 @@ def get_apartment_maintenance(
 def get_apartment_leases(
     db: Session, 
     apartmentId: int, 
-    isActive: Optional[bool] = None
+    isActive: Optional[bool] = None,
+    user_id: Optional[int] = None
 ):
     """Get leases for an apartment with optional active filter."""
     query = db.query(models.Lease).filter(
         models.Lease.apartmentId == apartmentId
     )
+    if user_id is not None:
+        query = query.filter(models.Lease.userId == user_id)
     
     leases = query.order_by(models.Lease.startDate.desc()).all()
     
@@ -292,12 +305,15 @@ def get_apartment_invoices(
     apartmentId: int, 
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
-    month: Optional[int] = None
+    month: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """Get invoices for an apartment with optional filters."""
     query = db.query(models.Invoice).filter(
         models.Invoice.apartmentId == apartmentId
     )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
     
     if isPaid is not None:
         query = query.filter(models.Invoice.isPaid == isPaid)
@@ -334,8 +350,11 @@ def get_tenants(db: Session, skip: int = 0, limit: int = 100, user_id: Optional[
         # In caso di errore, riprova con una query più semplice
         return db.query(models.Tenant).all()
 
-def get_tenant(db: Session, tenantId: int):
-    return db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
+def get_tenant(db: Session, tenantId: int, user_id: Optional[int] = None):
+    query = db.query(models.Tenant).filter(models.Tenant.id == tenantId)
+    if user_id is not None:
+        query = query.filter(models.Tenant.userId == user_id)
+    return query.first()
 
 def create_tenant(db: Session, tenant: schemas.TenantCreate, user_id: Optional[int] = None):
     # Convert Pydantic model to dict
@@ -557,11 +576,13 @@ def create_tenant_without_commit(db: Session, tenant: schemas.TenantCreate, user
     db.flush()  # Genera l'ID senza fare commit
     return db_tenant
 
-def get_tenant_leases(db: Session, tenantId: int, isActive: Optional[bool] = None):
+def get_tenant_leases(db: Session, tenantId: int, isActive: Optional[bool] = None, user_id: Optional[int] = None):
     """Get leases for a tenant with optional active filter."""
     query = db.query(models.Lease).filter(
         models.Lease.tenantId == tenantId
     )
+    if user_id is not None:
+        query = query.filter(models.Lease.userId == user_id)
     
     leases = query.order_by(models.Lease.startDate.desc()).all()
     
@@ -575,12 +596,15 @@ def get_tenant_invoices(
     tenantId: int, 
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
-    month: Optional[int] = None
+    month: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """Get invoices for a tenant with optional filters."""
     query = db.query(models.Invoice).filter(
         models.Invoice.tenantId == tenantId
     )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
     
     if isPaid is not None:
         query = query.filter(models.Invoice.isPaid == isPaid)
@@ -593,27 +617,33 @@ def get_tenant_invoices(
     
     return query.order_by(models.Invoice.issueDate.desc()).all()
 
-def get_tenant_payment_history(db: Session, tenantId: int):
+def get_tenant_payment_history(db: Session, tenantId: int, user_id: Optional[int] = None):
     """Get payment history for a tenant."""
     # This query gets all payment records for invoices associated with this tenant
-    return db.query(models.PaymentRecord).join(
+    query = db.query(models.PaymentRecord).join(
         models.Invoice,
         models.PaymentRecord.invoiceId == models.Invoice.id
     ).filter(
         models.Invoice.tenantId == tenantId
-    ).order_by(models.PaymentRecord.paymentDate.desc()).all()
+    )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
+    return query.order_by(models.PaymentRecord.paymentDate.desc()).all()
 
-def search_tenants(db: Session, query: str):
+def search_tenants(db: Session, query: str, user_id: Optional[int] = None):
     """Search tenants by name, email, or document number."""
     search = f"%{query}%"
-    return db.query(models.Tenant).filter(
+    q = db.query(models.Tenant).filter(
         or_(
             models.Tenant.firstName.ilike(search),
             models.Tenant.lastName.ilike(search),
             models.Tenant.email.ilike(search),
             models.Tenant.documentNumber.ilike(search)
         )
-    ).all()
+    )
+    if user_id is not None:
+        q = q.filter(models.Tenant.userId == user_id)
+    return q.all()
 
 
 
@@ -734,9 +764,12 @@ def get_lease_document(db: Session, document_id: int):
     """Get a specific lease document by ID."""
     return db.query(models.LeaseDocument).filter(models.LeaseDocument.id == document_id).first()
 
-def get_lease_documents(db: Session, leaseId: int):
+def get_lease_documents(db: Session, leaseId: int, user_id: Optional[int] = None):
     """Get all documents for a specific lease."""
-    return db.query(models.LeaseDocument).filter(models.LeaseDocument.leaseId == leaseId).all()
+    query = db.query(models.LeaseDocument).filter(models.LeaseDocument.leaseId == leaseId)
+    if user_id is not None:
+        query = query.join(models.Lease).filter(models.Lease.userId == user_id)
+    return query.all()
 
 def delete_lease_document(db: Session, document_id: int):
     """Delete a lease document."""
@@ -763,16 +796,19 @@ def create_lease_payment(db: Session, payment: schemas.LeasePaymentCreate):
     db.refresh(db_payment)
     return db_payment
 
-def get_lease_payments(db: Session, leaseId: int):
+def get_lease_payments(db: Session, leaseId: int, user_id: Optional[int] = None):
     """Get all payments for a specific lease."""
-    return db.query(models.LeasePayment).filter(models.LeasePayment.leaseId == leaseId).all()
+    query = db.query(models.LeasePayment).filter(models.LeasePayment.leaseId == leaseId)
+    if user_id is not None:
+        query = query.join(models.Lease).filter(models.Lease.userId == user_id)
+    return query.all()
 
-def search_leases(db: Session, query: str):
+def search_leases(db: Session, query: str, user_id: Optional[int] = None):
     """Search leases by associated tenant or apartment."""
     search = f"%{query}%"
     
     # Search by tenant name or apartment name
-    return db.query(models.Lease).join(
+    q = db.query(models.Lease).join(
         models.Tenant, models.Lease.tenantId == models.Tenant.id
     ).join(
         models.Apartment, models.Lease.apartmentId == models.Apartment.id
@@ -782,7 +818,10 @@ def search_leases(db: Session, query: str):
             models.Tenant.lastName.ilike(search),
             models.Apartment.name.ilike(search)
         )
-    ).all()
+    )
+    if user_id is not None:
+        q = q.filter(models.Lease.userId == user_id)
+    return q.all()
 
 
 
@@ -948,12 +987,14 @@ def delete_utility_reading(db: Session, reading_id: int):
         return True
     return False
 
-def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = None):
+def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = None, user_id: Optional[int] = None):
     """Get utility summary for a specific apartment."""
     # Query utilities
     query = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId
     )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
     
     if year:
         query = query.filter(func.extract('year', models.UtilityReading.readingDate) == year)
@@ -1000,12 +1041,15 @@ def get_utility_summary(db: Session, apartmentId: int, year: Optional[int] = Non
     
     return summary_list
 
-def get_yearly_utility_statistics(db: Session, year: int):
+def get_yearly_utility_statistics(db: Session, year: int, user_id: Optional[int] = None):
     """Get utility statistics for all apartments for a specific year."""
     # Query all readings for the year
-    readings = db.query(models.UtilityReading).filter(
+    query = db.query(models.UtilityReading).filter(
         func.extract('year', models.UtilityReading.readingDate) == year
-    ).all()
+    )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    readings = query.all()
     
     # Group by apartment and month
     stats_dict = {}
@@ -1062,13 +1106,16 @@ def get_yearly_utility_statistics(db: Session, year: int):
     
     return stats_list
 
-def get_apartment_consumption(db: Session, apartmentId: int, year: int):
+def get_apartment_consumption(db: Session, apartmentId: int, year: int, user_id: Optional[int] = None):
     """Get utility consumption data for a specific apartment and year."""
     # Query all readings for the apartment and year
-    readings = db.query(models.UtilityReading).filter(
+    query = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId,
         func.extract('year', models.UtilityReading.readingDate) == year
-    ).all()
+    )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    readings = query.all()
     
     # Get the apartment name
     apartment = db.query(models.Apartment).filter(models.Apartment.id == apartmentId).first()
@@ -1135,7 +1182,7 @@ def get_apartment_consumption(db: Session, apartmentId: int, year: int):
     
     return result
 
-def get_utility_statistics_overview(db: Session, year: Optional[int] = None):
+def get_utility_statistics_overview(db: Session, year: Optional[int] = None, user_id: Optional[int] = None):
     """Get overall utility statistics."""
     from datetime import datetime
     
@@ -1143,9 +1190,12 @@ def get_utility_statistics_overview(db: Session, year: Optional[int] = None):
         year = datetime.now().year
     
     # Query all readings for the year
-    readings = db.query(models.UtilityReading).filter(
+    query = db.query(models.UtilityReading).filter(
         func.extract('year', models.UtilityReading.readingDate) == year
-    ).all()
+    )
+    if user_id is not None:
+        query = query.filter(models.UtilityReading.userId == user_id)
+    readings = query.all()
     
     # Get all apartments
     apartments = db.query(models.Apartment).all()
@@ -1521,9 +1571,12 @@ def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.Pay
     db.refresh(db_payment)
     return db_payment
 
-def get_invoice_payment_records(db: Session, invoice_id: int):
+def get_invoice_payment_records(db: Session, invoice_id: int, user_id: Optional[int] = None):
     """Get all payment records for an invoice."""
-    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    query = db.query(models.Invoice).filter(models.Invoice.id == invoice_id)
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
+    db_invoice = query.first()
     if not db_invoice:
         return None
     
@@ -1531,9 +1584,12 @@ def get_invoice_payment_records(db: Session, invoice_id: int):
         models.PaymentRecord.invoiceId == invoice_id
     ).order_by(models.PaymentRecord.paymentDate.desc()).all()
 
-def send_invoice_reminder(db: Session, invoice_id: int, reminder_data: dict):
+def send_invoice_reminder(db: Session, invoice_id: int, reminder_data: dict, user_id: Optional[int] = None):
     """Send a reminder for an invoice."""
-    db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    query = db.query(models.Invoice).filter(models.Invoice.id == invoice_id)
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
+    db_invoice = query.first()
     if not db_invoice:
         return None
     
@@ -1553,7 +1609,7 @@ def send_invoice_reminder(db: Session, invoice_id: int, reminder_data: dict):
         "sent_at": datetime.utcnow().isoformat()
     }
 
-def get_overdue_invoices(db: Session, days_overdue: int = 7, include_tenant_info: bool = True):
+def get_overdue_invoices(db: Session, days_overdue: int = 7, include_tenant_info: bool = True, user_id: Optional[int] = None):
     """Get overdue invoices."""
     cutoff_date = datetime.utcnow().date() - timedelta(days=days_overdue)
     
@@ -1561,6 +1617,8 @@ def get_overdue_invoices(db: Session, days_overdue: int = 7, include_tenant_info
         models.Invoice.isPaid == False,
         models.Invoice.dueDate < cutoff_date
     )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
     
     if include_tenant_info:
         query = query.join(models.Tenant)
@@ -1723,7 +1781,7 @@ def generate_invoice_from_lease(db: Session, data: dict):
         "message": "Fattura generata con successo"
     }
 
-def get_invoice_statistics(db: Session, period: str = "this_month"):
+def get_invoice_statistics(db: Session, period: str = "this_month", user_id: Optional[int] = None):
     """Get invoice statistics and KPI."""
     today = datetime.utcnow().date()
     
@@ -1745,9 +1803,13 @@ def get_invoice_statistics(db: Session, period: str = "this_month"):
         end_date = today
     
     # Get invoices for the period
-    invoices = db.query(models.Invoice).filter(
+    query = db.query(models.Invoice).filter(
         models.Invoice.issueDate >= start_date,
         models.Invoice.issueDate <= end_date
+    )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
+    invoices = query.all()
     ).all()
     
     total_invoiced = sum(inv.total for inv in invoices)
@@ -1792,7 +1854,7 @@ def generate_invoice_pdf(db: Session, invoice_id: int, include_logo: bool = True
         "message": "PDF generato con successo"
     }
 
-def send_bulk_reminders(db: Session, data: dict):
+def send_bulk_reminders(db: Session, data: dict, user_id: Optional[int] = None):
     """Send reminders for multiple invoices."""
     invoice_ids = data.get('invoice_ids', [])
     send_via = data.get('send_via', 'email')
@@ -1805,9 +1867,13 @@ def send_bulk_reminders(db: Session, data: dict):
     
     for invoice_id in invoice_ids:
         try:
-            reminder_data = {
-                "send_via": send_via,
-                "template": template,
+            # Verify invoice belongs to user
+            query = db.query(models.Invoice).filter(models.Invoice.id == invoice_id)
+            if user_id is not None:
+                query = query.filter(models.Invoice.userId == user_id)
+            if not query.first():
+                failed_count += 1
+                continue
                 "message": custom_message
             }
             result = send_invoice_reminder(db, invoice_id, reminder_data)
@@ -1866,12 +1932,15 @@ def get_lease_invoices(
     leaseId: int, 
     isPaid: Optional[bool] = None,
     year: Optional[int] = None,
-    month: Optional[int] = None
+    month: Optional[int] = None,
+    user_id: Optional[int] = None
 ):
     """Get invoices for a lease with optional filters."""
     query = db.query(models.Invoice).filter(
         models.Invoice.leaseId == leaseId
     )
+    if user_id is not None:
+        query = query.filter(models.Invoice.userId == user_id)
     
     if isPaid is not None:
         query = query.filter(models.Invoice.isPaid == isPaid)
