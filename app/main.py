@@ -231,11 +231,25 @@ async def security_headers_middleware(request: Request, call_next):
     # Strict-Transport-Security: indica al browser di usare sempre HTTPS
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
-    # Cache-Control: previene il caching lato browser per le API
-    if request.url.path.startswith("/api/") or request.url.path.startswith("/tenants/") or request.url.path.startswith("/apartments/") or request.url.path.startswith("/leases/"):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    # Cache-Control: previene il caching lato browser per tutte le API scoped all'utente
+    # Questi endpoint ritornano dati diversi a seconda dell'utente autenticato
+    user_scoped_paths = [
+        "/api/",
+        "/tenants/",
+        "/apartments/",
+        "/leases/",
+        "/utilities/",
+        "/invoices/",
+        "/users/",
+        "/maintenance/"
+    ]
+    
+    # Se è un endpoint scoped all'utente, disabilita il caching
+    if any(request.url.path.startswith(path) for path in user_scoped_paths):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        response.headers["Vary"] = "Authorization"  # Fondamentale per HTTP caching proxies
     
     # X-Content-Type-Options: previene MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
