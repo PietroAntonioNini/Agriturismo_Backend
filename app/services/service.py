@@ -788,9 +788,12 @@ def delete_lease_document(db: Session, document_id: int):
         return True
     return False
 
-def create_lease_payment(db: Session, payment: schemas.LeasePaymentCreate):
+def create_lease_payment(db: Session, payment: schemas.LeasePaymentCreate, user_id: Optional[int] = None):
     """Create a new lease payment record."""
-    db_payment = models.LeasePayment(**payment.dict())
+    data = payment.dict()
+    if user_id is not None:
+        data["userId"] = user_id
+    db_payment = models.LeasePayment(**data)
     db.add(db_payment)
     db.commit()
     db.refresh(db_payment)
@@ -1474,8 +1477,7 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     )
     
     db.add(db_invoice)
-    db.commit()
-    db.refresh(db_invoice)
+    db.flush()  # Flush to get db_invoice.id without committing
     
     # Create invoice items
     for item in invoice.items:
@@ -1483,7 +1485,8 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
             invoiceId=db_invoice.id,
             description=item.description,
             amount=item.amount,
-            type=item.type
+            type=item.type,
+            userId=user_id if user_id is not None else None
         )
         db.add(db_item)
     
@@ -1491,7 +1494,7 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     db.refresh(db_invoice)
     return db_invoice
 
-def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate):
+def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate, user_id: Optional[int] = None):
     """Update an existing invoice."""
     db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if not db_invoice:
@@ -1519,7 +1522,8 @@ def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate)
             invoiceId=invoice_id,
             description=item.description,
             amount=item.amount,
-            type=item.type
+            type=item.type,
+            userId=user_id if user_id is not None else db_invoice.userId
         )
         db.add(db_item)
     
@@ -1551,7 +1555,7 @@ def mark_invoice_as_paid(db: Session, invoice_id: int, payment_data: dict):
     db.refresh(db_invoice)
     return db_invoice
 
-def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.PaymentRecordCreate):
+def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.PaymentRecordCreate, user_id: Optional[int] = None):
     """Add a payment record to an invoice."""
     db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if not db_invoice:
@@ -1563,7 +1567,8 @@ def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.Pay
         paymentDate=payment_record.paymentDate,
         paymentMethod=payment_record.paymentMethod,
         reference=payment_record.reference,
-        notes=payment_record.notes
+        notes=payment_record.notes,
+        userId=user_id if user_id is not None else None
     )
     
     db.add(db_payment)
@@ -1696,7 +1701,7 @@ def generate_monthly_invoices(db: Session, data: dict):
             items=items
         )
         
-        invoice = create_invoice(db, invoice_data)
+        invoice = create_invoice(db, invoice_data, user_id=lease.userId)
         generated_count += 1
         total_amount += invoice.total
     
@@ -1772,7 +1777,7 @@ def generate_invoice_from_lease(db: Session, data: dict):
         items=items
     )
     
-    invoice = create_invoice(db, invoice_data)
+    invoice = create_invoice(db, invoice_data, user_id=lease.userId)
     
     return {
         "invoice_id": invoice.id,

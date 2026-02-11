@@ -215,7 +215,7 @@ def record_lease_payment(
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
-    return service.create_lease_payment(db, payment)
+    return service.create_lease_payment(db, payment, user_id=current_user.id)
 
 # GET lease payments
 @router.get("/{leaseId}/payments", response_model=List[schemas.LeasePayment])

@@ -75,7 +75,7 @@ def update_invoice(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Update an existing invoice"""
-    updated_invoice = service.update_invoice(db, invoice_id, invoice)
+    updated_invoice = service.update_invoice(db, invoice_id, invoice, user_id=current_user.id)
     if updated_invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return updated_invoice
@@ -115,7 +115,7 @@ def add_payment_record(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Add a payment record to an invoice"""
-    record = service.add_payment_record(db, invoice_id, payment_record)
+    record = service.add_payment_record(db, invoice_id, payment_record, user_id=current_user.id)
     if record is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return record
