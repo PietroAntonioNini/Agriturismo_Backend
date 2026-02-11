@@ -254,6 +254,12 @@ class Lease(Base):
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deletedAt = Column(DateTime, nullable=True)  # Per soft delete
 
+    # Letture iniziali (baseline) - aggiornate dopo ogni fattura mensile generata
+    electricityReadingId = Column(Integer, ForeignKey("utility_readings.id"), nullable=True)
+    waterReadingId = Column(Integer, ForeignKey("utility_readings.id"), nullable=True)
+    gasReadingId = Column(Integer, ForeignKey("utility_readings.id"), nullable=True)
+    electricityLaundryReadingId = Column(Integer, ForeignKey("utility_readings.id"), nullable=True)
+
     # Relazione con User (nuova per multi-tenancy)
     user = relationship("User", back_populates="leases")
 
@@ -263,6 +269,12 @@ class Lease(Base):
     documents = relationship("LeaseDocument", back_populates="lease")
     payments = relationship("LeasePayment", back_populates="lease")
     invoices = relationship("Invoice", back_populates="lease")
+
+    # Relazioni con letture baseline (foreign_keys esplicite per evitare ambiguità)
+    electricityReading = relationship("UtilityReading", foreign_keys=[electricityReadingId])
+    waterReading = relationship("UtilityReading", foreign_keys=[waterReadingId])
+    gasReading = relationship("UtilityReading", foreign_keys=[gasReadingId])
+    electricityLaundryReading = relationship("UtilityReading", foreign_keys=[electricityLaundryReadingId])
     
     @property
     def isActive(self):

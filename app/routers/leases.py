@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Q
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
+import logging
 from datetime import datetime, date
 
 from app.database import get_db
@@ -10,6 +11,8 @@ from app.schemas import schemas
 from app.services import service
 
 from app.core.auth import get_current_active_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/leases",
@@ -61,6 +64,15 @@ def create_lease(
     
     # Aggiorna lo stato dell'appartamento a "occupied"
     service.update_apartment_status(db, lease.apartmentId, "occupied")
+    
+    # Genera automaticamente la fattura di ingresso (caparra)
+    try:
+        entry_invoice = service.create_entry_invoice(db, db_lease, user_id=current_user.id)
+        if entry_invoice:
+            logger.info(f"Fattura ingresso {entry_invoice.invoiceNumber} creata per lease {db_lease.id}")
+    except Exception as e:
+        logger.error(f"Errore nella generazione della fattura di ingresso per lease {db_lease.id}: {e}")
+        # Non blocchiamo la creazione del contratto
     
     return db_lease
 

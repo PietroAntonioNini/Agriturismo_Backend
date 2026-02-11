@@ -196,8 +196,15 @@ class LeaseBase(CamelCaseModel):
         # For values that are already date objects or 'YYYY-MM-DD' strings, Pydantic will handle them.
         return value
 
+# Schema annidato per le letture iniziali (baseline)
+class InitialReadings(CamelCaseModel):
+    electricityReadingId: Optional[int] = None
+    waterReadingId: Optional[int] = None
+    gasReadingId: Optional[int] = None
+    electricityLaundryReadingId: Optional[int] = None
+
 class LeaseCreate(LeaseBase):
-    pass
+    initialReadings: Optional[InitialReadings] = None
 
 class Lease(LeaseBase):
     id: int
@@ -207,6 +214,11 @@ class Lease(LeaseBase):
     payments: Optional[List[LeasePayment]] = []
     isActive: bool
     status: str
+    # Baseline reading IDs (esposte nella risposta)
+    electricityReadingId: Optional[int] = None
+    waterReadingId: Optional[int] = None
+    gasReadingId: Optional[int] = None
+    electricityLaundryReadingId: Optional[int] = None
 
     class Config:
         orm_mode = True

@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import logging
 
 from app.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.services import service
 from app.core.auth import get_current_active_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/utilities",
@@ -107,7 +110,23 @@ def create_utility_reading(
     reading.totalCost = reading.consumption * reading.unitCost
     
     # Crea la lettura usando l'utente corrente
-    return service.create_utility_reading(db, reading, user_id=current_user.id)
+    db_reading = service.create_utility_reading(db, reading, user_id=current_user.id)
+    
+    # Trigger: controlla se generare automaticamente la fattura mensile
+    try:
+        auto_invoice = service.check_and_generate_monthly_invoice(
+            db, reading.apartmentId, current_user.id
+        )
+        if auto_invoice:
+            logger.info(
+                f"Fattura mensile {auto_invoice.invoiceNumber} generata automaticamente "
+                f"dopo upload lettura {reading.type} per appartamento {reading.apartmentId}"
+            )
+    except Exception as e:
+        logger.error(f"Errore nella generazione automatica fattura per appartamento {reading.apartmentId}: {e}")
+        # Non blocchiamo la creazione della lettura
+    
+    return db_reading
 
 # PUT update utility reading
 @router.put("/{reading_id}", response_model=schemas.UtilityReading)
@@ -121,7 +140,21 @@ def update_utility_reading(
     if existing_reading is None:
         raise HTTPException(status_code=404, detail="Utility reading not found")
     
-    return service.update_utility_reading(db, reading_id, reading)
+    updated = service.update_utility_reading(db, reading_id, reading)
+    
+    # Cascade: aggiorna la fattura se questa lettura era stata usata per generarne una
+    try:
+        cascade_result = service.cascade_update_invoice_for_reading(db, reading_id, current_user.id)
+        if cascade_result:
+            logger.info(
+                f"Fattura {cascade_result.invoiceNumber} aggiornata a cascata "
+                f"dopo modifica lettura {reading_id}"
+            )
+    except Exception as e:
+        logger.error(f"Errore nell'aggiornamento a cascata della fattura per lettura {reading_id}: {e}")
+        # Non blocchiamo l'aggiornamento della lettura
+    
+    return updated
 
 # DELETE utility reading
 @router.delete("/{reading_id}", status_code=status.HTTP_204_NO_CONTENT)

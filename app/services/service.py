@@ -693,6 +693,15 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
     data = lease.dict()
     if user_id is not None:
         data["userId"] = user_id
+    
+    # Estrai le letture iniziali dal campo annidato initialReadings
+    initial_readings = data.pop("initialReadings", None)
+    if initial_readings:
+        data["electricityReadingId"] = initial_readings.get("electricityReadingId")
+        data["waterReadingId"] = initial_readings.get("waterReadingId")
+        data["gasReadingId"] = initial_readings.get("gasReadingId")
+        data["electricityLaundryReadingId"] = initial_readings.get("electricityLaundryReadingId")
+    
     db_lease = models.Lease(**data)
     db.add(db_lease)
     db.commit()
@@ -2189,3 +2198,446 @@ def update_entity_for_user(db: Session, model_class, entity_id: int, update_data
 def delete_entity_for_user(db: Session, model_class, entity_id: int, user_id: int):
     """Soft delete an entity for a specific user and free its ID."""
     return soft_delete_entity(db, model_class, entity_id, user_id)
+
+
+# ----- Auto-Invoice Generation -----
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+def create_entry_invoice(db: Session, lease, user_id: int):
+    """
+    Genera automaticamente una fattura di ingresso (caparra) alla creazione del contratto.
+    
+    - 1 item: type="entry", amount=securityDeposit
+    - dueDate = issueDate + 10 giorni
+    - invoiceNumber con prefisso "CAP-"
+    """
+    if not lease.securityDeposit or lease.securityDeposit <= 0:
+        logger.info(f"Lease {lease.id}: nessun securityDeposit, fattura ingresso non generata")
+        return None
+
+    # Recupera il nome dell'appartamento per la descrizione
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == lease.apartmentId).first()
+    apt_name = apartment.name if apartment else f"Apt {lease.apartmentId}"
+
+    issue_date = lease.startDate
+    due_date = issue_date + timedelta(days=10)
+
+    # Genera invoice number con prefisso CAP-
+    timestamp = int(datetime.utcnow().timestamp() * 1000)
+    invoice_number = f"CAP-{timestamp}-{lease.id}"
+
+    # Crea la fattura
+    db_invoice = models.Invoice(
+        leaseId=lease.id,
+        tenantId=lease.tenantId,
+        apartmentId=lease.apartmentId,
+        invoiceNumber=invoice_number,
+        month=issue_date.month,
+        year=issue_date.year,
+        issueDate=issue_date,
+        dueDate=due_date,
+        subtotal=0.0,
+        tax=0.0,
+        total=lease.securityDeposit,
+        notes="Fattura di ingresso - Caparra",
+        userId=user_id
+    )
+    db.add(db_invoice)
+    db.flush()
+
+    # Crea l'item di caparra
+    db_item = models.InvoiceItem(
+        invoiceId=db_invoice.id,
+        description=f"Caparra {apt_name}",
+        amount=lease.securityDeposit,
+        type="entry",
+        userId=user_id
+    )
+    db.add(db_item)
+
+    db.commit()
+    db.refresh(db_invoice)
+
+    logger.info(f"Fattura ingresso {invoice_number} generata per lease {lease.id}, importo {lease.securityDeposit}")
+    return db_invoice
+
+
+def check_and_generate_monthly_invoice(db: Session, apartment_id: int, user_id: int):
+    """
+    Controlla se tutte le utenze obbligatorie hanno una lettura successiva al baseline
+    e, in caso affermativo, genera automaticamente la fattura mensile.
+    
+    Flusso:
+    1. Trova il lease attivo per l'appartamento
+    2. Verifica che il lease abbia baseline readings impostati
+    3. Per ogni tipo obbligatorio (electricity, water, gas), cerca la prima lettura con id > baseline
+    4. Se tutti presenti → genera fattura con affitto + utenze + costi fissi
+    5. Aggiorna i baseline IDs nel lease con le letture appena usate
+    
+    Returns:
+        Invoice object se generata, None altrimenti
+    """
+    # 1. Trova il lease attivo per l'appartamento
+    today = date.today()
+    lease = db.query(models.Lease).filter(
+        models.Lease.apartmentId == apartment_id,
+        models.Lease.userId == user_id,
+        models.Lease.deletedAt.is_(None),
+        models.Lease.startDate <= today,
+        models.Lease.endDate > today
+    ).first()
+
+    if not lease:
+        logger.debug(f"Nessun lease attivo per appartamento {apartment_id}")
+        return None
+
+    # 2. Verifica che il lease abbia baseline readings
+    if not lease.electricityReadingId or not lease.waterReadingId or not lease.gasReadingId:
+        logger.debug(f"Lease {lease.id}: baseline readings non impostati, skip")
+        return None
+
+    # 3. Per ogni tipo obbligatorio, cerca la prima lettura con id > baseline
+    required_types = {
+        "electricity": lease.electricityReadingId,
+        "water": lease.waterReadingId,
+        "gas": lease.gasReadingId,
+    }
+
+    next_readings = {}
+    baseline_readings = {}
+
+    for utype, baseline_id in required_types.items():
+        # Recupera la lettura baseline
+        baseline = db.query(models.UtilityReading).filter(
+            models.UtilityReading.id == baseline_id
+        ).first()
+        if not baseline:
+            logger.warning(f"Lease {lease.id}: baseline reading id={baseline_id} tipo {utype} non trovata")
+            return None
+        baseline_readings[utype] = baseline
+
+        # Cerca la prima lettura successiva (stesso appartamento, stesso tipo, subtype principale)
+        next_reading = db.query(models.UtilityReading).filter(
+            models.UtilityReading.apartmentId == apartment_id,
+            models.UtilityReading.type == utype,
+            models.UtilityReading.id > baseline_id,
+            models.UtilityReading.deletedAt.is_(None),
+            # Escludi letture con subtype 'laundry' dalla ricerca electricity principale
+            (models.UtilityReading.subtype.is_(None) | (models.UtilityReading.subtype != 'laundry')) if utype == 'electricity' else True
+        ).order_by(models.UtilityReading.id.asc()).first()
+
+        if not next_reading:
+            logger.debug(f"Lease {lease.id}: nessuna lettura successiva per {utype} dopo baseline id={baseline_id}")
+            return None
+
+        next_readings[utype] = next_reading
+
+    # Opzionale: lavanderia
+    next_laundry = None
+    baseline_laundry = None
+    if lease.electricityLaundryReadingId:
+        baseline_laundry = db.query(models.UtilityReading).filter(
+            models.UtilityReading.id == lease.electricityLaundryReadingId
+        ).first()
+
+        if baseline_laundry:
+            next_laundry = db.query(models.UtilityReading).filter(
+                models.UtilityReading.apartmentId == apartment_id,
+                models.UtilityReading.type == 'electricity',
+                models.UtilityReading.subtype == 'laundry',
+                models.UtilityReading.id > lease.electricityLaundryReadingId,
+                models.UtilityReading.deletedAt.is_(None)
+            ).order_by(models.UtilityReading.id.asc()).first()
+            # La lavanderia è opzionale: se non c'è, procediamo comunque
+
+    # 4. Tutte le utenze obbligatorie hanno una lettura successiva → genera fattura!
+
+    # Determina mese/anno dalla lettura più recente tra le 3
+    latest_reading = max(next_readings.values(), key=lambda r: r.readingDate)
+    invoice_month = latest_reading.readingDate.month
+    invoice_year = latest_reading.readingDate.year
+
+    issue_date = date.today()
+    due_date = issue_date + timedelta(days=15)
+
+    # Genera invoice number
+    invoice_number = generate_invoice_number(db)
+
+    # Nomi mesi in italiano
+    month_names = [
+        "", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+    ]
+
+    # Recupera nome appartamento
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    apt_name = apartment.name if apartment else f"Apt {apartment_id}"
+
+    # Costruisci gli items
+    items_data = []
+
+    # Item 1: Affitto
+    items_data.append({
+        "description": f"Affitto {month_names[invoice_month]} {invoice_year}",
+        "amount": lease.monthlyRent,
+        "type": "rent"
+    })
+
+    # Items 2-4: Utenze obbligatorie
+    for utype in ["electricity", "water", "gas"]:
+        baseline = baseline_readings[utype]
+        current = next_readings[utype]
+
+        consumption = current.currentReading - baseline.currentReading
+        cost = current.totalCost if current.totalCost else consumption * current.unitCost
+
+        type_labels = {
+            "electricity": "Elettricità",
+            "water": "Acqua",
+            "gas": "Gas"
+        }
+        type_units = {
+            "electricity": "kWh",
+            "water": "m³",
+            "gas": "m³"
+        }
+
+        label = type_labels.get(utype, utype)
+        unit = type_units.get(utype, "")
+
+        description = (
+            f"{label}: lettura {baseline.currentReading:.1f} → {current.currentReading:.1f} "
+            f"(consumo {consumption:.1f} {unit} × €{current.unitCost:.2f})"
+        )
+
+        items_data.append({
+            "description": description,
+            "amount": round(cost, 2),
+            "type": utype
+        })
+
+    # Item opzionale: Lavanderia
+    if next_laundry and baseline_laundry:
+        consumption = next_laundry.currentReading - baseline_laundry.currentReading
+        cost = next_laundry.totalCost if next_laundry.totalCost else consumption * next_laundry.unitCost
+
+        description = (
+            f"Elettricità Lavanderia: lettura {baseline_laundry.currentReading:.1f} → "
+            f"{next_laundry.currentReading:.1f} "
+            f"(consumo {consumption:.1f} kWh × €{next_laundry.unitCost:.2f})"
+        )
+
+        items_data.append({
+            "description": description,
+            "amount": round(cost, 2),
+            "type": "electricity_laundry"
+        })
+
+    # Items costi fissi (TARI e Contatori)
+    defaults = get_defaults(db)
+    items_data.append({
+        "description": "TARI (quota mensile)",
+        "amount": round(float(defaults.tari), 2),
+        "type": "tari"
+    })
+    items_data.append({
+        "description": "Contatori (quota mensile)",
+        "amount": round(float(defaults.meterFee), 2),
+        "type": "meter_fee"
+    })
+
+    # Calcola totali
+    utility_types = ['electricity', 'water', 'gas', 'electricity_laundry']
+    util_subtotal = sum(item["amount"] for item in items_data if item["type"] in utility_types)
+    total = sum(item["amount"] for item in items_data)
+
+    # Crea la fattura
+    db_invoice = models.Invoice(
+        leaseId=lease.id,
+        tenantId=lease.tenantId,
+        apartmentId=apartment_id,
+        invoiceNumber=invoice_number,
+        month=invoice_month,
+        year=invoice_year,
+        issueDate=issue_date,
+        dueDate=due_date,
+        subtotal=round(util_subtotal, 2),
+        tax=0.0,
+        total=round(total, 2),
+        notes=f"Fattura generata automaticamente - {month_names[invoice_month]} {invoice_year}",
+        userId=user_id
+    )
+    db.add(db_invoice)
+    db.flush()
+
+    # Crea gli items
+    for item in items_data:
+        db_item = models.InvoiceItem(
+            invoiceId=db_invoice.id,
+            description=item["description"],
+            amount=item["amount"],
+            type=item["type"],
+            userId=user_id
+        )
+        db.add(db_item)
+
+    # 5. AGGIORNA I BASELINE IDs nel lease
+    lease.electricityReadingId = next_readings["electricity"].id
+    lease.waterReadingId = next_readings["water"].id
+    lease.gasReadingId = next_readings["gas"].id
+    if next_laundry:
+        lease.electricityLaundryReadingId = next_laundry.id
+    lease.updatedAt = datetime.utcnow()
+
+    db.commit()
+    db.refresh(db_invoice)
+
+    logger.info(
+        f"Fattura mensile {invoice_number} generata per lease {lease.id}, "
+        f"appartamento {apt_name}, mese {invoice_month}/{invoice_year}, "
+        f"totale €{total:.2f}"
+    )
+    return db_invoice
+
+
+def cascade_update_invoice_for_reading(db: Session, reading_id: int, user_id: int):
+    """
+    Quando una lettura utenze viene modificata, aggiorna a cascata la fattura che la utilizzava.
+    
+    Logica:
+    1. La lettura modificata potrebbe essere il baseline corrente di un lease
+       (cioè è stata la "lettura corrente" nell'ultima fattura generata)
+    2. Trova il lease dove questa lettura è un baseline
+    3. Trova la fattura più recente per quel lease
+    4. Ricalcola l'item corrispondente e aggiorna i totali
+    """
+    # Carica la lettura aggiornata
+    updated_reading = db.query(models.UtilityReading).filter(
+        models.UtilityReading.id == reading_id
+    ).first()
+    if not updated_reading:
+        return None
+
+    apartment_id = updated_reading.apartmentId
+    reading_type = updated_reading.type
+    reading_subtype = updated_reading.subtype
+
+    # Determina il tipo di item nella fattura
+    if reading_type == "electricity" and reading_subtype == "laundry":
+        invoice_item_type = "electricity_laundry"
+        lease_field = "electricityLaundryReadingId"
+    elif reading_type == "electricity":
+        invoice_item_type = "electricity"
+        lease_field = "electricityReadingId"
+    elif reading_type == "water":
+        invoice_item_type = "water"
+        lease_field = "waterReadingId"
+    elif reading_type == "gas":
+        invoice_item_type = "gas"
+        lease_field = "gasReadingId"
+    else:
+        return None
+
+    # Cerca il lease dove questa lettura è il baseline corrente
+    lease = db.query(models.Lease).filter(
+        models.Lease.userId == user_id,
+        models.Lease.deletedAt.is_(None),
+        getattr(models.Lease, lease_field) == reading_id
+    ).first()
+
+    if not lease:
+        logger.debug(f"Lettura {reading_id}: non è baseline di nessun lease, skip cascade invoice")
+        return None
+
+    # Trova la lettura precedente (usata come baseline nella fattura che ha generato questa come "current")
+    # La lettura precedente è quella immediatamente prima di questa per lo stesso appartamento e tipo
+    prev_query = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartment_id,
+        models.UtilityReading.type == reading_type,
+        models.UtilityReading.id < reading_id,
+        models.UtilityReading.deletedAt.is_(None)
+    )
+    if reading_subtype:
+        prev_query = prev_query.filter(models.UtilityReading.subtype == reading_subtype)
+    else:
+        prev_query = prev_query.filter(
+            (models.UtilityReading.subtype.is_(None)) | (models.UtilityReading.subtype != 'laundry')
+        )
+    
+    prev_reading = prev_query.order_by(models.UtilityReading.id.desc()).first()
+
+    if not prev_reading:
+        logger.warning(f"Lettura {reading_id}: nessuna lettura precedente trovata, impossibile ricalcolare")
+        return None
+
+    # Ricalcola il consumo e il costo
+    consumption = updated_reading.currentReading - prev_reading.currentReading
+    cost = round(consumption * updated_reading.unitCost, 2)
+
+    # Trova la fattura più recente per questo lease che contiene un item di questo tipo
+    recent_invoice = db.query(models.Invoice).filter(
+        models.Invoice.leaseId == lease.id,
+        models.Invoice.deletedAt.is_(None),
+        models.Invoice.items.any(models.InvoiceItem.type == invoice_item_type)
+    ).order_by(models.Invoice.id.desc()).first()
+
+    if not recent_invoice:
+        logger.debug(f"Lettura {reading_id}: nessuna fattura trovata con item tipo {invoice_item_type}")
+        return None
+
+    # Aggiorna l'item corrispondente
+    type_labels = {
+        "electricity": "Elettricità",
+        "water": "Acqua",
+        "gas": "Gas",
+        "electricity_laundry": "Elettricità Lavanderia"
+    }
+    type_units = {
+        "electricity": "kWh",
+        "water": "m³",
+        "gas": "m³",
+        "electricity_laundry": "kWh"
+    }
+    label = type_labels.get(invoice_item_type, invoice_item_type)
+    unit = type_units.get(invoice_item_type, "")
+
+    new_description = (
+        f"{label}: lettura {prev_reading.currentReading:.1f} → {updated_reading.currentReading:.1f} "
+        f"(consumo {consumption:.1f} {unit} × €{updated_reading.unitCost:.2f})"
+    )
+
+    item_updated = False
+    for item in recent_invoice.items:
+        if item.type == invoice_item_type:
+            item.amount = cost
+            item.description = new_description
+            item.updatedAt = datetime.utcnow()
+            item_updated = True
+            break
+
+    if not item_updated:
+        logger.warning(f"Fattura {recent_invoice.id}: item tipo {invoice_item_type} non trovato")
+        return None
+
+    # Ricalcola i totali della fattura
+    utility_types = ['electricity', 'water', 'gas', 'electricity_laundry']
+    util_subtotal = sum(
+        (i.amount or 0.0) for i in recent_invoice.items if i.type in utility_types
+    )
+    total = sum((i.amount or 0.0) for i in recent_invoice.items)
+
+    recent_invoice.subtotal = round(util_subtotal, 2)
+    recent_invoice.total = round(total, 2)
+    recent_invoice.updatedAt = datetime.utcnow()
+
+    db.commit()
+    db.refresh(recent_invoice)
+
+    logger.info(
+        f"Fattura {recent_invoice.invoiceNumber} aggiornata a cascata: "
+        f"item {invoice_item_type} → €{cost:.2f}, totale → €{recent_invoice.total:.2f}"
+    )
+    return recent_invoice
