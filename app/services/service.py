@@ -12,6 +12,7 @@ import aiofiles  # Per operazioni asincrone sui file
 
 from app.models import models
 from app.schemas import schemas
+from app.services.billing_defaults_service import get_defaults
 
 
 
@@ -1454,10 +1455,13 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     if not invoice.invoiceNumber:
         invoice.invoiceNumber = generate_invoice_number(db)
     
-    # Calculate totals
-    subtotal = sum(item.amount for item in invoice.items)
-    tax = subtotal * 0.22  # 22% IVA
-    total = subtotal + tax
+    # Calculate totals as per user request:
+    # subtotal = sum of utility items ONLY
+    # tax = 0
+    # total = sum of utilities + rent + fixed costs (everything)
+    
+    util_subtotal = sum(item.amount for item in invoice.items if item.type in ['electricity', 'water', 'gas', 'electricity_laundry'])
+    total = sum(item.amount for item in invoice.items)
     
     # Create invoice
     db_invoice = models.Invoice(
@@ -1469,8 +1473,8 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
         year=invoice.year,
         issueDate=invoice.issueDate,
         dueDate=invoice.dueDate,
-        subtotal=subtotal,
-        tax=tax,
+        subtotal=util_subtotal,
+        tax=0.0,
         total=total,
         notes=invoice.notes,
         userId=user_id if user_id is not None else None
@@ -1504,13 +1508,12 @@ def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate,
     for key, value in invoice.dict(exclude={'items'}).items():
         setattr(db_invoice, key, value)
     
-    # Recalculate totals
-    subtotal = sum(item.amount for item in invoice.items)
-    tax = subtotal * 0.22
-    total = subtotal + tax
+    # Recalculate totals as per user request
+    util_subtotal = sum(item.amount for item in invoice.items if item.type in ['electricity', 'water', 'gas', 'electricity_laundry'])
+    total = sum(item.amount for item in invoice.items)
     
-    db_invoice.subtotal = subtotal
-    db_invoice.tax = tax
+    db_invoice.subtotal = util_subtotal
+    db_invoice.tax = 0.0
     db_invoice.total = total
     db_invoice.updatedAt = datetime.utcnow()
     
@@ -1657,35 +1660,23 @@ def generate_monthly_invoices(db: Session, data: dict):
             continue
         
         # Create invoice items
+        rent_month_name = [
+            "", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+            "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+        ][month]
+        
         items = [
             schemas.InvoiceItemCreate(
-                invoiceId=0,  # Will be set after invoice creation
-                description="Affitto mensile",
+                invoiceId=0,
+                description=f"Affitto {rent_month_name} {year}",
                 amount=lease.monthlyRent,
                 type="rent"
             )
         ]
         
-        # Add utility costs if requested
+        # Add utility costs and fixed costs if requested
         if include_utilities:
-            utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
-            for utility_type, cost in utility_costs.items():
-                if cost > 0:
-                    # Special handling for electricity_laundry
-                    if utility_type == "electricity_laundry":
-                        items.append(schemas.InvoiceItemCreate(
-                            invoiceId=0,
-                            description="Elettricità Lavanderia",
-                            amount=cost,
-                            type="other"
-                        ))
-                    else:
-                        items.append(schemas.InvoiceItemCreate(
-                            invoiceId=0,
-                            description=f"Consumo {utility_type}",
-                            amount=cost,
-                            type=utility_type
-                        ))
+            items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year))
         
         # Create invoice
         invoice_data = schemas.InvoiceCreate(
@@ -1696,8 +1687,8 @@ def generate_monthly_invoices(db: Session, data: dict):
             month=month,
             year=year,
             issueDate=datetime.utcnow().date(),
-            dueDate=datetime.utcnow().date() + timedelta(days=30),
-            notes=f"Fattura automatica per {month}/{year}",
+            dueDate=datetime.utcnow().date() + timedelta(days=15),
+            notes=f"Fattura automatica per {rent_month_name} {year}",
             items=items
         )
         
@@ -1724,35 +1715,23 @@ def generate_invoice_from_lease(db: Session, data: dict):
         return {"error": "Lease not found"}
     
     # Create invoice items
+    rent_month_name = [
+        "", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+    ][month]
+    
     items = [
         schemas.InvoiceItemCreate(
             invoiceId=0,
-            description="Affitto mensile",
+            description=f"Affitto {rent_month_name} {year}",
             amount=lease.monthlyRent,
             type="rent"
         )
     ]
     
-    # Add utility costs if requested
+    # Add utility costs and fixed costs if requested
     if include_utilities:
-        utility_costs = calculate_utility_costs(db, lease.apartmentId, month, year)
-        for utility_type, cost in utility_costs.items():
-            if cost > 0:
-                # Special handling for electricity_laundry
-                if utility_type == "electricity_laundry":
-                    items.append(schemas.InvoiceItemCreate(
-                        invoiceId=0,
-                        description="Elettricità Lavanderia",
-                        amount=cost,
-                        type="other"
-                    ))
-                else:
-                    items.append(schemas.InvoiceItemCreate(
-                        invoiceId=0,
-                        description=f"Consumo {utility_type}",
-                        amount=cost,
-                        type=utility_type
-                    ))
+        items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year))
     
     # Add custom items
     for custom_item in custom_items:
@@ -1772,8 +1751,8 @@ def generate_invoice_from_lease(db: Session, data: dict):
         month=month,
         year=year,
         issueDate=datetime.utcnow().date(),
-        dueDate=datetime.utcnow().date() + timedelta(days=30),
-        notes=f"Fattura generata da contratto per {month}/{year}",
+        dueDate=datetime.utcnow().date() + timedelta(days=15),
+        notes=f"Fattura generata da contratto per {rent_month_name} {year}",
         items=items
     )
     
@@ -1963,10 +1942,10 @@ def get_lease_invoices(
 
 def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: int):
     """Calculate utility costs for a specific month and year."""
-    # Get the apartment to check its name
+    # This is kept for backward compatibility if needed, 
+    # but get_detailed_utility_and_fixed_items is preferred now.
     apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
     
-    # Get utility readings for the month
     readings = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartment_id,
         models.UtilityReading.readingDate >= date(year, month, 1),
@@ -1979,36 +1958,82 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
         "gas": 0.0
     }
     
-    # Special handling for "Appartamento 8" - separate electricity main and laundry
-    # Check by name instead of ID (more reliable across environments)
     is_apartment_8 = apartment and apartment.name == "Appartamento 8"
     
     if is_apartment_8:
         electricity_main = 0.0
         electricity_laundry = 0.0
-        
         for reading in readings:
             if reading.type == "electricity":
                 if reading.subtype == "laundry":
                     electricity_laundry += reading.totalCost
-                else:  # main or None
+                else:
                     electricity_main += reading.totalCost
             elif reading.type in costs:
                 costs[reading.type] += reading.totalCost
-        
-        # Set main electricity cost
         costs["electricity"] = electricity_main
-        
-        # Add laundry electricity as a separate cost type
         if electricity_laundry > 0:
             costs["electricity_laundry"] = electricity_laundry
     else:
-        # Standard processing for other apartments
         for reading in readings:
             if reading.type in costs:
                 costs[reading.type] += reading.totalCost
-    
     return costs
+
+def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: int, year: int) -> List[schemas.InvoiceItemCreate]:
+    """Get detailed items for utilities (from previous month) and fixed costs."""
+    # Utilities: fetch for previous month
+    prev_month = month - 1
+    prev_year = year
+    if prev_month == 0:
+        prev_month = 12
+        prev_year = year - 1
+    
+    readings = db.query(models.UtilityReading).filter(
+        models.UtilityReading.apartmentId == apartment_id,
+        models.UtilityReading.readingDate >= date(prev_year, prev_month, 1),
+        models.UtilityReading.readingDate <= date(prev_year, prev_month, 28) + timedelta(days=4)
+    ).all()
+    
+    items = []
+    type_labels = {
+        "electricity": "LUCE",
+        "water": "ACQUA",
+        "gas": "GAS"
+    }
+    
+    for r in readings:
+        label = type_labels.get(r.type, r.type.upper())
+        if r.subtype == "laundry":
+            label = "LUCE LAVANDERIA"
+            
+        unit = "kWh" if r.type == "electricity" else "m³"
+        
+        desc = f"{label} A {r.currentReading} P {r.previousReading} | {r.consumption} {unit} x {r.unitCost} €/{unit}"
+        
+        items.append(schemas.InvoiceItemCreate(
+            invoiceId=0,
+            description=desc,
+            amount=r.totalCost,
+            type=r.type
+        ))
+    
+    # Fixed costs from defaults
+    defaults = get_defaults(db)
+    items.append(schemas.InvoiceItemCreate(
+        invoiceId=0,
+        description="TARI (N. Urbana)",
+        amount=float(defaults.tari),
+        type="other"
+    ))
+    items.append(schemas.InvoiceItemCreate(
+        invoiceId=0,
+        description="Contatori",
+        amount=float(defaults.meterFee),
+        type="other"
+    ))
+    
+    return items
 
 def get_laundry_electricity_cost_for_month(db: Session, apartment_id: int, month: int, year: int):
     """Get laundry electricity cost for a specific apartment, month and year."""
