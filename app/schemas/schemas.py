@@ -245,9 +245,9 @@ class PaymentRecord(PaymentRecordBase):
 
 # ------------------ SCHEMA INVOICE ------------------
 class InvoiceBase(CamelCaseModel):
-    leaseId: int
-    tenantId: int
-    apartmentId: int
+    leaseId: Optional[int] = None
+    tenantId: Optional[int] = None
+    apartmentId: Optional[int] = None
     invoiceNumber: str
     month: int
     year: int
