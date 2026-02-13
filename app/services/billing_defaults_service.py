@@ -4,29 +4,33 @@ from typing import Optional, Dict, Any
 from app.models.models import BillingDefaults
 
 
-SINGLE_ID = 1
-
-
-def get_defaults(db: Session) -> BillingDefaults:
-    """Recupera l'unica riga di default di fatturazione. Se non esiste, la crea con i valori di default."""
-    obj = db.query(BillingDefaults).limit(1).one_or_none()
+def get_defaults(db: Session, user_id: int) -> BillingDefaults:
+    """Recupera la riga di default di fatturazione per l'utente. Se non esiste, la crea con i valori di default."""
+    obj = db.query(BillingDefaults).filter(BillingDefaults.userId == user_id).first()
     if obj:
         return obj
 
-    # Crea riga iniziale
-    obj = BillingDefaults(id=SINGLE_ID)
+    # Crea riga iniziale per l'utente
+    obj = BillingDefaults(
+        userId=user_id,
+        tari=15.00,
+        meterFee=3.00,
+        unitCostElectricity=0.75,
+        unitCostWater=3.40,
+        unitCostGas=4.45
+    )
     db.add(obj)
     db.commit()
     db.refresh(obj)
     return obj
 
 
-def upsert_defaults(db: Session, payload: Dict[str, Any], updated_by: Optional[int] = None) -> BillingDefaults:
-    """Aggiorna o crea i default di fatturazione.
+def upsert_defaults(db: Session, payload: Dict[str, Any], user_id: int, updated_by: Optional[int] = None) -> BillingDefaults:
+    """Aggiorna o crea i default di fatturazione per l'utente.
 
     payload accetta chiavi: 'tari', 'meterFee', 'unitCosts': { 'electricity', 'water', 'gas' }
     """
-    obj = get_defaults(db)
+    obj = get_defaults(db, user_id)
 
     # Aggiorna valori se presenti
     if payload.get("tari") is not None:
@@ -43,7 +47,7 @@ def upsert_defaults(db: Session, payload: Dict[str, Any], updated_by: Optional[i
         if unit.get("gas") is not None:
             obj.unitCostGas = unit["gas"]
 
-    obj.updatedBy = updated_by
+    obj.updatedBy = updated_by or user_id
     db.add(obj)
     db.commit()
     db.refresh(obj)

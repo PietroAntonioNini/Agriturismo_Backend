@@ -1718,7 +1718,7 @@ def generate_monthly_invoices(db: Session, data: dict):
         
         # Add utility costs and fixed costs if requested
         if include_utilities:
-            items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year))
+            items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year, user_id=lease.userId))
         
         # Create invoice
         invoice_data = schemas.InvoiceCreate(
@@ -1773,7 +1773,7 @@ def generate_invoice_from_lease(db: Session, data: dict):
     
     # Add utility costs and fixed costs if requested
     if include_utilities:
-        items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year))
+        items.extend(get_detailed_utility_and_fixed_items(db, lease.apartmentId, month, year, user_id=lease.userId))
     
     # Add custom items
     for custom_item in custom_items:
@@ -2022,7 +2022,7 @@ def calculate_utility_costs(db: Session, apartment_id: int, month: int, year: in
                 costs[reading.type] += reading.totalCost
     return costs
 
-def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: int, year: int) -> List[schemas.InvoiceItemCreate]:
+def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: int, year: int, user_id: int) -> List[schemas.InvoiceItemCreate]:
     """Get detailed items for utilities (from previous month) and fixed costs."""
     # Utilities: fetch for previous month
     prev_month = month - 1
@@ -2061,7 +2061,7 @@ def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: 
         ))
     
     # Fixed costs from defaults
-    defaults = get_defaults(db)
+    defaults = get_defaults(db, user_id=user_id)
     items.append(schemas.InvoiceItemCreate(
         invoiceId=0,
         description="TARI (N. Urbana)",
@@ -2469,8 +2469,8 @@ def check_and_generate_monthly_invoice(db: Session, apartment_id: int, user_id: 
             "type": "electricity_laundry"
         })
 
-    # Items costi fissi (TARI e Contatori)
-    defaults = get_defaults(db)
+    # Items costi fissi (TARI e Contatori) per l'utente
+    defaults = get_defaults(db, user_id=user_id)
     items_data.append({
         "description": "TARI (quota mensile)",
         "amount": round(float(defaults.tari), 2),
