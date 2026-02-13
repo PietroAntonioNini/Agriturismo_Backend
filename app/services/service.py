@@ -697,10 +697,43 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
     # Estrai le letture iniziali dal campo annidato initialReadings
     initial_readings = data.pop("initialReadings", None)
     if initial_readings:
-        data["electricityReadingId"] = initial_readings.get("electricityReadingId")
-        data["waterReadingId"] = initial_readings.get("waterReadingId")
-        data["gasReadingId"] = initial_readings.get("gasReadingId")
-        data["electricityLaundryReadingId"] = initial_readings.get("electricityLaundryReadingId")
+        apt_id = data.get("apartmentId")
+        start_date = data.get("startDate")
+        
+        # Mappa dei tipi utenza e dei relativi campi nel payload
+        utility_map = {
+            "electricity": ("electricityReadingId", "electricityValue", None),
+            "water": ("waterReadingId", "waterValue", None),
+            "gas": ("gasReadingId", "gasValue", None),
+            "electricity_laundry": ("electricityLaundryReadingId", "electricityLaundryValue", "laundry")
+        }
+
+        for u_type, (id_field, val_field, subtype) in utility_map.items():
+            r_id = initial_readings.get(id_field)
+            r_val = initial_readings.get(val_field)
+
+            if r_id:
+                # Se abbiamo l'ID, lo usiamo direttamente
+                data[id_field] = r_id
+            elif r_val is not None:
+                # Se abbiamo il valore, creiamo una lettura di sistema (baseline)
+                new_reading = models.UtilityReading(
+                    userId=user_id,
+                    apartmentId=apt_id,
+                    type=u_type if u_type != "electricity_laundry" else "electricity",
+                    subtype=subtype,
+                    readingDate=start_date,
+                    previousReading=r_val,
+                    currentReading=r_val,
+                    consumption=0.0,
+                    unitCost=0.0,
+                    totalCost=0.0,
+                    isSpecialReading=True,
+                    notes="Lettura iniziale di sistema (Baseline)"
+                )
+                db.add(new_reading)
+                db.flush() # Per ottenere l'ID senza fare commit
+                data[id_field] = new_reading.id
     
     db_lease = models.Lease(**data)
     db.add(db_lease)

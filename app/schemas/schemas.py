@@ -198,10 +198,17 @@ class LeaseBase(CamelCaseModel):
 
 # Schema annidato per le letture iniziali (baseline)
 class InitialReadings(CamelCaseModel):
+    # Opzione 1: ID di letture esistenti
     electricityReadingId: Optional[int] = None
     waterReadingId: Optional[int] = None
     gasReadingId: Optional[int] = None
     electricityLaundryReadingId: Optional[int] = None
+    
+    # Opzione 2: Valori crudi (per nuovi appartamenti senza storico)
+    electricityValue: Optional[float] = None
+    waterValue: Optional[float] = None
+    gasValue: Optional[float] = None
+    electricityLaundryValue: Optional[float] = None
 
 class LeaseCreate(LeaseBase):
     initialReadings: Optional[InitialReadings] = None
