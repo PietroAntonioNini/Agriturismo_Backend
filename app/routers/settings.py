@@ -5,6 +5,7 @@ from app.database import get_db
 from app.schemas.schemas import BillingDefaultsRead, BillingDefaultsUpdate
 from app.core.auth import get_current_user
 from app.models.models import User
+from app.services.billing_defaults_service import get_defaults, upsert_defaults
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
