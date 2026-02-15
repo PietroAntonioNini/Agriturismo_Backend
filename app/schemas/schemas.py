@@ -232,7 +232,7 @@ class Lease(LeaseBase):
 
 # ------------------ SCHEMA INVOICE ITEM ------------------
 class InvoiceItemBase(CamelCaseModel):
-    invoiceId: int
+    invoiceId: Optional[int] = None
     description: str
     amount: float
     type: str
@@ -272,9 +272,8 @@ class InvoiceBase(CamelCaseModel):
     year: int
     issueDate: date
     dueDate: date
-    subtotal: float
-    tax: float
-    total: float
+    subtotal: Optional[float] = 0.0
+    total: Optional[float] = 0.0
     isPaid: bool = False
     paymentDate: Optional[date] = None
     paymentMethod: Optional[str] = None

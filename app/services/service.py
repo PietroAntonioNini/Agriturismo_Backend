@@ -1499,7 +1499,6 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     
     # Calculate totals as per user request:
     # subtotal = sum of utility items ONLY
-    # tax = 0
     # total = sum of utilities + rent + fixed costs (everything)
     
     util_subtotal = sum(item.amount for item in invoice.items if item.type in ['electricity', 'water', 'gas', 'electricity_laundry'])
@@ -1516,7 +1515,6 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
         issueDate=invoice.issueDate,
         dueDate=invoice.dueDate,
         subtotal=util_subtotal,
-        tax=0.0,
         total=total,
         notes=invoice.notes,
         userId=user_id if user_id is not None else None

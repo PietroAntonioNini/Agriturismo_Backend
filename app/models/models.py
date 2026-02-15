@@ -341,7 +341,6 @@ class Invoice(Base):
     issueDate = Column(Date)
     dueDate = Column(Date)
     subtotal = Column(Float)
-    tax = Column(Float)
     total = Column(Float)
     isPaid = Column(Boolean, default=False)
     paymentDate = Column(Date, nullable=True)
