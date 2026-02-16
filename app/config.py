@@ -109,6 +109,14 @@ class Settings(BaseSettings):
     include_qr_code: bool = os.getenv("INCLUDE_QR_CODE", "True").lower() == "true"
     include_payment_instructions: bool = os.getenv("INCLUDE_PAYMENT_INSTRUCTIONS", "True").lower() == "true"
 
+    # Configurazioni Cloudflare R2 Store
+    r2_endpoint_url: str = os.getenv("R2_ENDPOINT_URL", "")
+    r2_access_key: str = os.getenv("R2_ACCESS_KEY", "")
+    r2_secret_key: str = os.getenv("R2_SECRET_KEY", "")
+    bucket_prospetti: str = os.getenv("BUCKET_PROSPETTI", "")
+    bucket_contratti: str = os.getenv("BUCKET_CONTRATTI", "")
+    bucket_documenti_inquilini: str = os.getenv("BUCKET_DOCUMENTI_INQUILINI", "")
+
 settings = Settings()
 
 logger.info(f"Configurazione caricata: DB={settings.database_url}, TokenExpire={settings.access_token_expire_minutes}m, RefreshExpire={settings.refresh_token_expire_days}d")

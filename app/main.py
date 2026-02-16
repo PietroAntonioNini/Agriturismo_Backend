@@ -14,7 +14,7 @@ from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 from starlette.responses import RedirectResponse
 
 from app.config import settings
-from app.routers import apartments, tenants, leases, utilities, auth, users
+from app.routers import apartments, tenants, leases, utilities, auth, users, documents
 from app.routers import settings as settings_router
 logger = logging.getLogger(__name__)
 
@@ -327,6 +327,8 @@ logger.info("Registrazione router leases...")
 app.include_router(leases.router)
 logger.info("Registrazione router utilities...")
 app.include_router(utilities.router)
+logger.info("Registrazione router documents...")
+app.include_router(documents.router)
 logger.info("Registrazione router invoices...")
 app.include_router(invoices.router)  # Invoices router
 logger.info("Registrazione router auth...")
