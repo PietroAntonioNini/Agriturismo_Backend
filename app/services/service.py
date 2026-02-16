@@ -1634,6 +1634,9 @@ def add_payment_record(db: Session, invoice_id: int, payment_record: schemas.Pay
     if not db_invoice:
         return None
     
+    db_invoice.isPaid = True
+    db_invoice.updatedAt = datetime.utcnow()
+    
     db_payment = models.PaymentRecord(
         invoiceId=invoice_id,
         amount=payment_record.amount,
