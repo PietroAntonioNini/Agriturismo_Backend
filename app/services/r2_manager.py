@@ -52,7 +52,13 @@ class R2Manager:
             )
             return True
         except ClientError as e:
-            logger.error(f"Errore R2 Upload: {e}")
+            logger.error(f"Errore R2 Upload nel bucket '{target_bucket}': {e}")
+            logger.error(f"Dettagli errore: {e.response if hasattr(e, 'response') else 'Nessun dettaglio'}")
+            return False
+        except Exception as e:
+            logger.error(f"Errore generico in R2 Upload: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
 
     def get_signed_url(self, file_key, file_type, expires_in=3600):
