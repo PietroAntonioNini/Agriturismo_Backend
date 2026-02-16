@@ -416,7 +416,7 @@ def delete_tenant(db: Session, tenantId: int):
             from app.services.r2_manager import R2Manager
             r2 = R2Manager()
             # La cartella R2 è 'documenti_inquilini/{id}/'
-            r2.delete_folder(f"documenti_inquilini/{tenantId}/", "inquilino")
+            r2.delete_folder(f"{tenantId}/", "inquilino")
         except Exception as e:
              print(f"Error deleting R2 tenant folder: {e}")
 

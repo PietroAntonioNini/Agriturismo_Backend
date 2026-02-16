@@ -43,12 +43,8 @@ async def upload_document(
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         safe_filename = "".join([c for c in file.filename if c.isalnum() or c in (' ', '.', '_', '-')]).strip()
         
-        # Determina la cartella/prefisso in base al tipo
-        folder_prefix = tipo_file
-        if 'documento' in tipo_file:
-            folder_prefix = 'documenti_inquilini'
-            
-        file_name = f"{folder_prefix}/{id_entita}/{timestamp}_{safe_filename}"
+        # Non serve prefisso se ogni tipo ha il suo bucket dedicato
+        file_name = f"{id_entita}/{timestamp}_{safe_filename}"
         
         # Mappa il tipo file al bucket
         # R2Manager mappa: 'prospetto', 'contratto', 'documento'
