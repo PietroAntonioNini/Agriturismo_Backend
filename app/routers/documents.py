@@ -64,10 +64,9 @@ async def upload_document(
             try:
                 if tipo_file == 'contratto':
                     # Crea record in LeaseDocument
-                    # Assumiamo che id_entita sia leaseId
                     lease = db.query(models.Lease).filter(models.Lease.id == id_entita).first()
                     if not lease:
-                        logger.warning(f"Lease {id_entita} non trovato per associazione documento.")
+                        logger.warning(f"Lease {id_entita} non trovato per associazione contratto.")
                     else:
                         new_doc = models.LeaseDocument(
                             leaseId=id_entita,
@@ -79,10 +78,28 @@ async def upload_document(
                         )
                         db.add(new_doc)
                         db.commit()
+
+                elif tipo_file == 'prospetto':
+                    # Crea record in LeaseDocument con type='prospectus'
+                    lease = db.query(models.Lease).filter(models.Lease.id == id_entita).first()
+                    if not lease:
+                        logger.warning(f"Lease {id_entita} non trovato per associazione prospetto.")
+                    else:
+                        # Opzionale: Se c'è già un prospetto eliminare il vecchio?
+                        # Per ora aggiungiamo come allegato
+                        new_doc = models.LeaseDocument(
+                            leaseId=id_entita,
+                            name=safe_filename,
+                            type='prospectus',
+                            url=file_name,
+                            uploadDate=datetime.now(),
+                            userId=current_user.id
+                        )
+                        db.add(new_doc)
+                        db.commit()
                         
                 elif tipo_file in ['documento_fronte', 'documento_retro']:
                     # Aggiorna Tenant
-                    # Assumiamo che id_entita sia tenantId
                     tenant = db.query(models.Tenant).filter(models.Tenant.id == id_entita).first()
                     if not tenant:
                         logger.warning(f"Tenant {id_entita} non trovato per associazione documento.")
@@ -177,7 +194,7 @@ async def delete_document(
              db.commit()
              logger.info(f"Rimosso riferimento file {file_key} dal tenant {tenant.id}")
 
-    elif tipo_file == 'contratto':
+    elif tipo_file in ['contratto', 'prospetto']:
         # Cerca in LeaseDocument
          doc = db.query(models.LeaseDocument).filter(models.LeaseDocument.url == file_key).first()
          if doc:
