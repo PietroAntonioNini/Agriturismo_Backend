@@ -836,8 +836,11 @@ def delete_lease(db: Session, leaseId: int):
                                 os.remove(file_path)
                          except:
                              pass
+            
+            # 1.1 Elimina cartella fatture da R2 (Bucket prospetti-mensili)
+            r2.delete_folder(f"{leaseId}/", 'prospetto')
         except Exception as e:
-            print(f"Error deleting lease documents: {e}")
+            print(f"Error deleting lease documents/invoices from R2: {e}")
 
         # 2. Elimina eventuali cartelle locali (Legacy)
         try:
@@ -1691,7 +1694,15 @@ def delete_invoice(db: Session, invoice_id: int):
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
         except Exception as e:
-            print(f"Error deleting invoice PDF: {e}")
+            print(f"Error deleting local invoice PDF: {e}")
+
+        # 2. Elimina da R2 (Bucket prospetti-mensili, path: leaseId/invoiceNumber.pdf)
+        try:
+            from app.services.r2_manager import R2Manager
+            r2 = R2Manager()
+            r2.delete_file(f"{db_invoice.leaseId}/{db_invoice.invoiceNumber}.pdf", 'prospetto')
+        except Exception as e:
+            print(f"Error deleting R2 invoice PDF: {e}")
 
         db.delete(db_invoice)
         db.commit()
