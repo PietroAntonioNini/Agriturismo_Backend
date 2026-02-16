@@ -348,8 +348,6 @@ class Invoice(Base):
     subtotal = Column(Float)
     total = Column(Float)
     isPaid = Column(Boolean, default=False)
-    paymentDate = Column(Date, nullable=True)
-    paymentMethod = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     reminderSent = Column(Boolean, default=False)
     reminderDate = Column(Date, nullable=True)

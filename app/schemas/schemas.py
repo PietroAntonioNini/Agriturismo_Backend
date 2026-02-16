@@ -275,14 +275,13 @@ class InvoiceBase(CamelCaseModel):
     subtotal: Optional[float] = 0.0
     total: Optional[float] = 0.0
     isPaid: bool = False
-    paymentDate: Optional[date] = None
-    paymentMethod: Optional[str] = None
     notes: Optional[str] = None
     reminderSent: bool = False
     reminderDate: Optional[date] = None
 
 class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate]
+    includeUtilities: bool = False
 
 class Invoice(InvoiceBase):
     id: int

@@ -1497,12 +1497,30 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     if not invoice.invoiceNumber:
         invoice.invoiceNumber = generate_invoice_number(db)
     
-    # Calculate totals as per user request:
+    # Process items: if includeUtilities, add them from the previous month
+    items_to_create = list(invoice.items) # Start with provided items
+    
+    if invoice.includeUtilities and user_id is not None:
+        # We need leaseId and apartmentId to get utilities
+        # If they are not provided, we might have issues, but let's assume they are or we can find them
+        if invoice.apartmentId:
+            # Use issueDate to determine month/year for utilities (previous month)
+            issue_date = invoice.issueDate or datetime.utcnow().date()
+            auto_items = get_detailed_utility_and_fixed_items(
+                db, 
+                invoice.apartmentId, 
+                issue_date.month, 
+                issue_date.year, 
+                user_id=user_id
+            )
+            items_to_create.extend(auto_items)
+
+    # Calculate totals
     # subtotal = sum of utility items ONLY
     # total = sum of utilities + rent + fixed costs (everything)
-    
-    util_subtotal = sum(item.amount for item in invoice.items if item.type in ['electricity', 'water', 'gas', 'electricity_laundry'])
-    total = sum(item.amount for item in invoice.items)
+    utility_types = ['electricity', 'water', 'gas', 'electricity_laundry']
+    util_subtotal = sum(item.amount for item in items_to_create if item.type in utility_types)
+    total = sum(item.amount for item in items_to_create)
     
     # Create invoice
     db_invoice = models.Invoice(
@@ -1537,7 +1555,7 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     db.flush()  # Flush to get db_invoice.id without committing
     
     # Create invoice items
-    for item in invoice.items:
+    for item in items_to_create:
         db_item = models.InvoiceItem(
             invoiceId=db_invoice.id,
             description=item.description,
@@ -1558,7 +1576,7 @@ def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate,
         return None
     
     # Update invoice fields
-    for key, value in invoice.dict(exclude={'items'}).items():
+    for key, value in invoice.dict(exclude={'items', 'includeUtilities'}).items():
         setattr(db_invoice, key, value)
     
     # Recalculate totals as per user request
@@ -1603,9 +1621,20 @@ def mark_invoice_as_paid(db: Session, invoice_id: int, payment_data: dict):
         return None
     
     db_invoice.isPaid = True
-    db_invoice.paymentDate = payment_data.get('payment_date', datetime.utcnow().date())
-    db_invoice.paymentMethod = payment_data.get('payment_method', 'bank_transfer')
     db_invoice.updatedAt = datetime.utcnow()
+    
+    # Create a PaymentRecord if needed or if data is provided
+    # This aligns with the new system where root payment fields are removed
+    payment_record = models.PaymentRecord(
+        invoiceId=invoice_id,
+        amount=db_invoice.total, # Default to total if not provided
+        paymentDate=payment_data.get('payment_date', datetime.utcnow().date()),
+        paymentMethod=payment_data.get('payment_method', 'bank_transfer'),
+        reference=payment_data.get('reference', ''),
+        notes=payment_data.get('notes', 'Marked as paid from invoice'),
+        userId=db_invoice.userId
+    )
+    db.add(payment_record)
     
     db.commit()
     db.refresh(db_invoice)
