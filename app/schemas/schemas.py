@@ -247,7 +247,7 @@ class InvoiceItem(InvoiceItemBase):
 
 # ------------------ SCHEMA PAYMENT RECORD ------------------
 class PaymentRecordBase(CamelCaseModel):
-    invoiceId: int
+    invoiceId: Optional[int] = None
     amount: float
     paymentDate: date
     paymentMethod: str
