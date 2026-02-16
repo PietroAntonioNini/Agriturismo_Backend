@@ -54,6 +54,11 @@ class UserRole(str, enum.Enum):
     manager = "manager"
     staff = "staff"
 
+class InvoiceAutomationType(str, enum.Enum):
+    immediate = "immediate"
+    scheduled = "scheduled"
+    manual = "manual"
+
 # Modelli delle tabelle
 class User(Base):
     __tablename__ = "users"
@@ -480,6 +485,10 @@ class BillingDefaults(Base):
     unitCostElectricity = Column(Numeric(10, 4), nullable=False, default=0.75)
     unitCostWater = Column(Numeric(10, 4), nullable=False, default=3.40)
     unitCostGas = Column(Numeric(10, 4), nullable=False, default=4.45)
+
+    # Impostazioni automazione
+    automationType = Column(Enum(InvoiceAutomationType), nullable=False, default=InvoiceAutomationType.manual)
+    automationDays = Column(Integer, nullable=False, default=3)
 
     # Audit
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

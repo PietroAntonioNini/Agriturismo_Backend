@@ -442,3 +442,12 @@ class BillingDefaultsUpdate(CamelCaseModel):
     tari: float | None = Field(default=None, ge=0)
     meterFee: float | None = Field(default=None, ge=0)
     unitCosts: UnitCosts | None = None
+
+# ------------------ SCHEMA INVOICE AUTOMATION ------------------
+class InvoiceAutomationRead(CamelCaseModel):
+    automationType: str
+    automationDays: int
+
+class InvoiceAutomationUpdate(CamelCaseModel):
+    automationType: Optional[str] = None
+    automationDays: Optional[int] = Field(None, ge=0)

@@ -17,7 +17,9 @@ def get_defaults(db: Session, user_id: int) -> BillingDefaults:
         meterFee=3.00,
         unitCostElectricity=0.75,
         unitCostWater=3.40,
-        unitCostGas=4.45
+        unitCostGas=4.45,
+        automationType="manual",
+        automationDays=3
     )
     db.add(obj)
     db.commit()
@@ -28,7 +30,7 @@ def get_defaults(db: Session, user_id: int) -> BillingDefaults:
 def upsert_defaults(db: Session, payload: Dict[str, Any], user_id: int, updated_by: Optional[int] = None) -> BillingDefaults:
     """Aggiorna o crea i default di fatturazione per l'utente.
 
-    payload accetta chiavi: 'tari', 'meterFee', 'unitCosts': { 'electricity', 'water', 'gas' }
+    payload accetta chiavi: 'tari', 'meterFee', 'unitCosts': { 'electricity', 'water', 'gas' }, 'automationType', 'automationDays'
     """
     obj = get_defaults(db, user_id)
 
@@ -46,6 +48,12 @@ def upsert_defaults(db: Session, payload: Dict[str, Any], user_id: int, updated_
             obj.unitCostWater = unit["water"]
         if unit.get("gas") is not None:
             obj.unitCostGas = unit["gas"]
+
+    # Nuovi campi automazione
+    if payload.get("automationType") is not None:
+        obj.automationType = payload["automationType"]
+    if payload.get("automationDays") is not None:
+        obj.automationDays = payload["automationDays"]
 
     obj.updatedBy = updated_by or user_id
     db.add(obj)

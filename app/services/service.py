@@ -1519,6 +1519,19 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
         notes=invoice.notes,
         userId=user_id if user_id is not None else None
     )
+
+    # Impostazioni automazione reminder
+    if user_id is not None:
+        defaults = get_defaults(db, user_id=user_id)
+        if defaults.automationType == models.InvoiceAutomationType.immediate:
+            db_invoice.reminderDate = db_invoice.issueDate
+            db_invoice.reminderSent = False
+        elif defaults.automationType == models.InvoiceAutomationType.scheduled:
+            db_invoice.reminderDate = db_invoice.issueDate + timedelta(days=defaults.automationDays)
+            db_invoice.reminderSent = False
+        else: # manual
+            db_invoice.reminderDate = None
+            db_invoice.reminderSent = False
     
     db.add(db_invoice)
     db.flush()  # Flush to get db_invoice.id without committing
