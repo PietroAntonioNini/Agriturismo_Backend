@@ -88,8 +88,14 @@ async def upload_document(
                         logger.warning(f"Tenant {id_entita} non trovato per associazione documento.")
                     else:
                         if tipo_file == 'documento_fronte':
+                            # Se c'è già un file R2, eliminalo
+                            if tenant.documentFrontImage and not tenant.documentFrontImage.startswith('/'):
+                                r2_manager.delete_file(tenant.documentFrontImage, 'documento_fronte')
                             tenant.documentFrontImage = file_name
                         else:
+                            # Se c'è già un file R2, eliminalo
+                            if tenant.documentBackImage and not tenant.documentBackImage.startswith('/'):
+                                r2_manager.delete_file(tenant.documentBackImage, 'documento_retro')
                             tenant.documentBackImage = file_name
                         db.commit()
                         
@@ -131,3 +137,52 @@ async def get_document_url(
         raise HTTPException(status_code=404, detail="Documento non trovato o errore generazione link")
     
     return {"url": url}
+
+@router.delete("/{file_key:path}")
+async def delete_document(
+    file_key: str,
+    tipo_file: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """
+    Elimina un documento da R2 e aggiorna il DB se necessario.
+    """
+    allowed_types = ['prospetto', 'contratto', 'documento_fronte', 'documento_retro', 'documento']
+    if tipo_file not in allowed_types:
+        raise HTTPException(status_code=400, detail="Tipo file non valido")
+
+    # 1. Elimina da R2
+    success = r2_manager.delete_file(file_key, tipo_file)
+    if not success:
+         # Non blocchiamo se fallisce R2 (magari non esiste più), ma logghiamo
+         logger.warning(f"Eliminazione R2 fallita o file non trovato: {file_key}")
+
+    # 2. Aggiorna il DB
+    # Cerca se questo file_key è usato in Tenant
+    if 'documento' in tipo_file:
+         # Cerca tenant che ha questo URL (esatta corrispondenza o parziale?)
+         # file_key è 'documenti_inquilini/ID/...'
+         # Nel DB salviamo il file_key intero
+         tenant = db.query(models.Tenant).filter(
+             (models.Tenant.documentFrontImage == file_key) | 
+             (models.Tenant.documentBackImage == file_key)
+         ).first()
+         
+         if tenant:
+             if tenant.documentFrontImage == file_key:
+                 tenant.documentFrontImage = None
+             if tenant.documentBackImage == file_key:
+                 tenant.documentBackImage = None
+             db.commit()
+             logger.info(f"Rimosso riferimento file {file_key} dal tenant {tenant.id}")
+
+    elif tipo_file == 'contratto':
+        # Cerca in LeaseDocument
+         doc = db.query(models.LeaseDocument).filter(models.LeaseDocument.url == file_key).first()
+         if doc:
+             db.delete(doc)
+             db.commit()
+             logger.info(f"Eliminato record LeaseDocument per {file_key}")
+
+    return {"status": "success", "message": "Documento eliminato"}

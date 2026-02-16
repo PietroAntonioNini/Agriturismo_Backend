@@ -399,18 +399,27 @@ def update_tenant(db: Session, tenantId: int, tenant: schemas.TenantCreate):
     return db_tenant
 
 def delete_tenant(db: Session, tenantId: int):
-    """Delete a tenant and all associated files."""
+    """Delete a tenant and all associated files (Local + R2)."""
     db_tenant = db.query(models.Tenant).filter(models.Tenant.id == tenantId).first()
     if db_tenant:
+        # 1. Elimina cartella locale (Legacy)
         try:
-            # Percorso della cartella del tenant
             tenant_dir = f"static/tenants/{tenantId}"
             if os.path.exists(tenant_dir):
                 shutil.rmtree(tenant_dir)
-                print(f"Deleted tenant directory: {tenant_dir}")
+                print(f"Deleted local tenant directory: {tenant_dir}")
         except Exception as e:
-            print(f"Error deleting tenant directory: {e}")
+            print(f"Error deleting local tenant directory: {e}")
         
+        # 2. Elimina cartella R2 (Nuovo)
+        try:
+            from app.services.r2_manager import R2Manager
+            r2 = R2Manager()
+            # La cartella R2 è 'documenti_inquilini/{id}/'
+            r2.delete_folder(f"documenti_inquilini/{tenantId}/", "inquilino")
+        except Exception as e:
+             print(f"Error deleting R2 tenant folder: {e}")
+
         # Elimina il tenant dal database
         db.delete(db_tenant)
         db.commit()
@@ -805,9 +814,39 @@ def update_lease(db: Session, leaseId: int, lease: schemas.LeaseCreate):
     return db_lease
 
 def delete_lease(db: Session, leaseId: int):
-    """Delete a lease."""
+    """Delete a lease and its associated documents (Local + R2)."""
     db_lease = db.query(models.Lease).filter(models.Lease.id == leaseId).first()
     if db_lease:
+        # 1. Elimina documenti associati
+        lease_docs = db.query(models.LeaseDocument).filter(models.LeaseDocument.leaseId == leaseId).all()
+        
+        try:
+            from app.services.r2_manager import R2Manager
+            r2 = R2Manager()
+            for doc in lease_docs:
+                 if doc.url:
+                     # Se è un URL R2 (non inizia con /), elimina da R2
+                     if not doc.url.startswith('/'):
+                         r2.delete_file(doc.url, 'contratto')
+                     # Se è locale
+                     else:
+                         try:
+                            file_path = f"static/leases/{leaseId}/documents/{os.path.basename(doc.url)}"
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                         except:
+                             pass
+        except Exception as e:
+            print(f"Error deleting lease documents: {e}")
+
+        # 2. Elimina eventuali cartelle locali (Legacy)
+        try:
+            lease_dir = f"static/leases/{leaseId}"
+            if os.path.exists(lease_dir):
+                shutil.rmtree(lease_dir)
+        except:
+             pass
+
         db.delete(db_lease)
         db.commit()
         return True
@@ -866,12 +905,27 @@ def get_lease_documents(db: Session, leaseId: int, user_id: Optional[int] = None
     return query.all()
 
 def delete_lease_document(db: Session, document_id: int):
-    """Delete a lease document."""
+    """Delete a lease document (Local or R2)."""
     db_document = db.query(models.LeaseDocument).filter(models.LeaseDocument.id == document_id).first()
     if db_document:
-        # Try to delete the physical file
+        # 1. Tenta eliminazione da R2 se non è path locale o se R2 è configurato
+        if db_document.url and not db_document.url.startswith('/'):
+            try:
+                from app.services.r2_manager import R2Manager
+                r2 = R2Manager()
+                r2.delete_file(db_document.url, 'contratto')
+            except Exception as e:
+                print(f"Error deleting from R2: {e}")
+
+        # 2. Tenta eliminazione fisica (Legacy/Local)
         try:
-            file_path = f"static/leases/{db_document.leaseId}/documents/{os.path.basename(str(db_document.url or ''))}"
+            # Gestione sicura del path
+            if db_document.url and db_document.url.startswith('/'):
+                 file_path = f"static{db_document.url.split('?')[0]}"
+            else:
+                 # Fallback per vecchi path o struttura
+                 file_path = f"static/leases/{db_document.leaseId}/documents/{os.path.basename(str(db_document.url or ''))}"
+            
             if os.path.exists(file_path):
                 os.remove(file_path)
         except:
@@ -1628,9 +1682,17 @@ def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate,
     return db_invoice
 
 def delete_invoice(db: Session, invoice_id: int):
-    """Delete an invoice."""
+    """Delete an invoice and its generated PDF."""
     db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if db_invoice:
+        # Elimina PDF generato se esiste
+        try:
+            pdf_path = f"static/invoices/{db_invoice.invoiceNumber}.pdf"
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+        except Exception as e:
+            print(f"Error deleting invoice PDF: {e}")
+
         db.delete(db_invoice)
         db.commit()
         return True

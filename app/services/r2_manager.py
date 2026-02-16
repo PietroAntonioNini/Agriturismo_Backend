@@ -86,3 +86,62 @@ class R2Manager:
         except ClientError as e:
             logger.error(f"Errore generazione URL: {e}")
             return None
+
+    def delete_file(self, file_key, file_type):
+        """
+        Elimina un file specifico da R2.
+        """
+        bucket_map = {
+            'prospetto': settings.bucket_prospetti,
+            'contratto': settings.bucket_contratti,
+            'documento': settings.bucket_documenti_inquilini,
+            'documento_fronte': settings.bucket_documenti_inquilini,
+            'documento_retro': settings.bucket_documenti_inquilini
+        }
+        
+        # Mappa i sottotipi generici
+        if 'documento' in file_type:
+            target_bucket = settings.bucket_documenti_inquilini
+        else:
+            target_bucket = bucket_map.get(file_type)
+
+        if not target_bucket:
+             logger.warning(f"Tentativo eliminazione file con tipo non valido: {file_type}")
+             return False
+
+        try:
+            self.s3.delete_object(Bucket=target_bucket, Key=file_key)
+            logger.info(f"File eliminato da R2: {file_key} (Bucket: {target_bucket})")
+            return True
+        except ClientError as e:
+            logger.error(f"Errore eliminazione file R2: {e}")
+            return False
+
+    def delete_folder(self, folder_prefix, file_type):
+        """
+        Elimina 'cartella' (tutti gli oggetti con prefisso) da R2.
+        Utile per pulizia quando si elimina un tenant.
+        """
+        # Mappa i sottotipi generici
+        if 'documento' in file_type or file_type == 'inquilino':
+            target_bucket = settings.bucket_documenti_inquilini
+        elif file_type == 'contratto':
+            target_bucket = settings.bucket_contratti
+        else:
+            return False
+
+        try:
+            # Lista oggetti con prefisso
+            response = self.s3.list_objects_v2(Bucket=target_bucket, Prefix=folder_prefix)
+            if 'Contents' in response:
+                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                if objects_to_delete:
+                    self.s3.delete_objects(
+                        Bucket=target_bucket,
+                        Delete={'Objects': objects_to_delete}
+                    )
+                    logger.info(f"Eliminati {len(objects_to_delete)} oggetti da R2 con prefisso {folder_prefix}")
+            return True
+        except ClientError as e:
+            logger.error(f"Errore eliminazione cartella R2: {e}")
+            return False
