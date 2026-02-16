@@ -1426,7 +1426,11 @@ def get_invoices(
     user_id: Optional[int] = None
 ):
     """Get invoices with optional filters."""
-    query = db.query(models.Invoice)
+    from sqlalchemy.orm import joinedload
+    query = db.query(models.Invoice).options(
+        joinedload(models.Invoice.items),
+        joinedload(models.Invoice.payments)
+    )
     if hasattr(models.Invoice, "deletedAt"):
         query = query.filter(models.Invoice.deletedAt.is_(None))
     if user_id is not None:
