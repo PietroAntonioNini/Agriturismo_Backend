@@ -1501,29 +1501,14 @@ def create_invoice(db: Session, invoice: schemas.InvoiceCreate, user_id: Optiona
     if not invoice.invoiceNumber:
         invoice.invoiceNumber = generate_invoice_number(db)
     
-    # Process items: if includeUtilities, add them from the previous month
-    items_to_create = list(invoice.items) # Start with provided items
+    # Create invoice items list
+    items_to_create = list(invoice.items)
     
-    # subtotal = sum of PROVIDED items (usually rent or entry)
-    subtotal = sum(item.amount for item in items_to_create)
+    # subtotal = sum of RENT items only as per user request
+    subtotal = sum(item.amount for item in items_to_create if item.type == 'rent')
     
-    auto_items_sum = 0.0
-    if invoice.includeUtilities and user_id is not None:
-        if invoice.apartmentId:
-            # Use issueDate to determine month/year for utilities (previous month)
-            issue_date = invoice.issueDate or datetime.utcnow().date()
-            auto_items = get_detailed_utility_and_fixed_items(
-                db, 
-                invoice.apartmentId, 
-                issue_date.month, 
-                issue_date.year, 
-                user_id=user_id
-            )
-            items_to_create.extend(auto_items)
-            auto_items_sum = sum(item.amount for item in auto_items)
-
-    # total = subtotal + auto_items
-    total = subtotal + auto_items_sum
+    # total = sum of all items (rent + utilities + fixed costs)
+    total = sum(item.amount for item in items_to_create)
     
     # Create invoice
     db_invoice = models.Invoice(
@@ -1579,18 +1564,15 @@ def update_invoice(db: Session, invoice_id: int, invoice: schemas.InvoiceCreate,
         return None
     
     # Update invoice fields
-    for key, value in invoice.dict(exclude={'items', 'includeUtilities'}).items():
+    for key, value in invoice.dict(exclude={'items'}).items():
         setattr(db_invoice, key, value)
     
     # Recalculate totals
-    # subtotal = PROVIDED items (rent)
-    subtotal = sum(item.amount for item in invoice.items)
+    # subtotal = Rent items
+    subtotal = sum(item.amount for item in invoice.items if item.type == 'rent')
     db_invoice.subtotal = subtotal
     
-    # Total calculation: if includeUtilities, we'd need to fetch them again or assume they're already in items?
-    # Usually update_invoice is for manual edits. If the user edits an invoice that had auto-utilities,
-    # those items are already in invoice.items (if frontend sends them back).
-    # Let's assume total is the sum of everything sent.
+    # total = sum of all items
     db_invoice.total = sum(item.amount for item in invoice.items)
     db_invoice.updatedAt = datetime.utcnow()
     

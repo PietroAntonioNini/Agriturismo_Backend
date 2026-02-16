@@ -281,7 +281,6 @@ class InvoiceBase(CamelCaseModel):
 
 class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate]
-    includeUtilities: bool = False
 
 class Invoice(InvoiceBase):
     id: int
