@@ -154,21 +154,6 @@ class LeaseDocument(LeaseDocumentBase):
     updatedAt: datetime
 
 # ------------------ SCHEMA LEASE PAYMENT ------------------
-class LeasePaymentBase(CamelCaseModel):
-    leaseId: int
-    amount: float
-    paymentDate: date
-    paymentType: str
-    reference: str
-    notes: Optional[str] = None
-
-class LeasePaymentCreate(LeasePaymentBase):
-    pass
-
-class LeasePayment(LeasePaymentBase):
-    id: int
-    createdAt: datetime
-    updatedAt: datetime
 
 # ------------------ SCHEMA LEASE ------------------
 class LeaseBase(CamelCaseModel):
@@ -218,7 +203,6 @@ class Lease(LeaseBase):
     createdAt: datetime
     updatedAt: datetime
     documents: Optional[List[LeaseDocument]] = []
-    payments: Optional[List[LeasePayment]] = []
     isActive: bool
     status: str
     # Baseline reading IDs (esposte nella risposta)
@@ -252,6 +236,7 @@ class PaymentRecordBase(CamelCaseModel):
     paymentDate: date
     paymentMethod: str
     reference: Optional[str] = None
+    status: Optional[str] = 'completed'
     notes: Optional[str] = None
 
 class PaymentRecordCreate(PaymentRecordBase):
@@ -261,6 +246,29 @@ class PaymentRecord(PaymentRecordBase):
     id: int
     createdAt: datetime
     updatedAt: datetime
+
+# ------------------ SCHEMA LEASE PAYMENT HISTORY (UNIFIED) ------------------
+class LeasePaymentHistoryItem(CamelCaseModel):
+    id: int
+    date: date
+    amount: float
+    method: str
+    type: str  # 'invoice' o 'lease'
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    # Dati fattura associata (se presente)
+    invoiceId: Optional[int] = None
+    invoiceNumber: Optional[str] = None
+    invoiceType: Optional[str] = None  # 'INV' o 'CAP'
+    invoiceMonth: Optional[int] = None
+    invoiceYear: Optional[int] = None
+
+class LeasePaymentHistoryResponse(CamelCaseModel):
+    items: List[LeasePaymentHistoryItem]
+    total: int
+    page: int
+    size: int
+    pages: int
 
 # ------------------ SCHEMA INVOICE ------------------
 class InvoiceBase(CamelCaseModel):

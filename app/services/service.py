@@ -688,6 +688,57 @@ def get_lease(db: Session, leaseId: int, user_id: Optional[int] = None):
         query = query.filter(models.Lease.userId == user_id)
     return query.first()
 
+def get_lease_payment_history(db: Session, lease_id: int, page: int = 1, size: int = 20, user_id: Optional[int] = None):
+    """Get optimized payment history for a lease (invoice payments only)."""
+    # 1. Recupera pagamenti fatture associati al contratto
+    query = db.query(
+        models.PaymentRecord, 
+        models.Invoice.invoiceNumber,
+        models.Invoice.month,
+        models.Invoice.year
+    ).join(
+        models.Invoice, models.Invoice.id == models.PaymentRecord.invoiceId
+    ).filter(
+        models.Invoice.leaseId == lease_id
+    )
+    
+    if user_id is not None:
+        query = query.filter(models.PaymentRecord.userId == user_id)
+        
+    # Applica ordinamento per data decrescente
+    query = query.order_by(models.PaymentRecord.paymentDate.desc())
+    
+    # Paginazione
+    total = query.count()
+    start = (page - 1) * size
+    results = query.offset(start).limit(size).all()
+    
+    # 2. Formatta i dati
+    items = []
+    for record, inv_num, inv_month, inv_year in results:
+        items.append({
+            "id": record.id,
+            "date": record.paymentDate,
+            "amount": record.amount,
+            "method": record.paymentMethod,
+            "type": "invoice",
+            "reference": record.reference or f"Fattura {inv_num}",
+            "notes": record.notes,
+            "invoiceId": record.invoiceId,
+            "invoiceNumber": inv_num,
+            "invoiceType": inv_num.split('-')[0] if inv_num else 'INV',
+            "invoiceMonth": inv_month,
+            "invoiceYear": inv_year
+        })
+    
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "pages": (total + size - 1) // size
+    }
+
 def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int] = None):
     """Create a new lease."""
     data = lease.dict()
@@ -831,23 +882,6 @@ def delete_lease_document(db: Session, document_id: int):
         return True
     return False
 
-def create_lease_payment(db: Session, payment: schemas.LeasePaymentCreate, user_id: Optional[int] = None):
-    """Create a new lease payment record."""
-    data = payment.dict()
-    if user_id is not None:
-        data["userId"] = user_id
-    db_payment = models.LeasePayment(**data)
-    db.add(db_payment)
-    db.commit()
-    db.refresh(db_payment)
-    return db_payment
-
-def get_lease_payments(db: Session, leaseId: int, user_id: Optional[int] = None):
-    """Get all payments for a specific lease."""
-    query = db.query(models.LeasePayment).filter(models.LeasePayment.leaseId == leaseId)
-    if user_id is not None:
-        query = query.join(models.Lease).filter(models.Lease.userId == user_id)
-    return query.all()
 
 def search_leases(db: Session, query: str, user_id: Optional[int] = None):
     """Search leases by associated tenant or apartment."""

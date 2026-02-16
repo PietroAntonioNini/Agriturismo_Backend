@@ -215,28 +215,22 @@ def delete_lease_document(
     service.delete_lease_document(db, document_id)
     return {"detail": "Document deleted successfully"}
 
-# POST record lease payment
-@router.post("/{leaseId}/payments", response_model=schemas.LeasePayment)
-def record_lease_payment(
-    leaseId: int,
-    payment: schemas.LeasePaymentCreate,
-    db: Session = Depends(get_db),
+
+# GET lease payment history (unified and paginated)
+@router.get("/{leaseId}/payments", response_model=schemas.LeasePaymentHistoryResponse)
+def get_lease_payment_history(
+    leaseId: int, 
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_active_user)
 ):
-    lease = service.get_lease(db, leaseId, user_id=current_user.id)
+    """Get unified and paginated payment history for a lease (invoice payments only)."""
+    lease = service.get_lease(db, leaseId, current_user.id)
     if lease is None:
         raise HTTPException(status_code=404, detail="Lease not found")
     
-    return service.create_lease_payment(db, payment, user_id=current_user.id)
-
-# GET lease payments
-@router.get("/{leaseId}/payments", response_model=List[schemas.LeasePayment])
-def get_lease_payments(leaseId: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    lease = service.get_lease(db, leaseId, user_id=current_user.id)
-    if lease is None:
-        raise HTTPException(status_code=404, detail="Lease not found")
-    
-    return service.get_lease_payments(db, leaseId, user_id=current_user.id)
+    return service.get_lease_payment_history(db, leaseId, page, size, user_id=current_user.id)
 
 # GET search leases
 @router.get("/search/", response_model=List[schemas.Lease])

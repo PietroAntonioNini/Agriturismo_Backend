@@ -103,8 +103,6 @@ class User(Base):
     # Relationship con LeaseDocuments (nuova per multi-tenancy)
     lease_documents = relationship("LeaseDocument", back_populates="user", cascade="all, delete-orphan")
 
-    # Relationship con LeasePayments (nuova per multi-tenancy)
-    lease_payments = relationship("LeasePayment", back_populates="user", cascade="all, delete-orphan")
 
     # Relationship con InvoiceItems (nuova per multi-tenancy)
     invoice_items = relationship("InvoiceItem", back_populates="user", cascade="all, delete-orphan")
@@ -272,7 +270,6 @@ class Lease(Base):
     tenant = relationship("Tenant", back_populates="leases")
     apartment = relationship("Apartment", back_populates="leases")
     documents = relationship("LeaseDocument", back_populates="lease")
-    payments = relationship("LeasePayment", back_populates="lease")
     invoices = relationship("Invoice", back_populates="lease")
 
     # Relazioni con letture baseline (foreign_keys esplicite per evitare ambiguità)
@@ -311,26 +308,6 @@ class LeaseDocument(Base):
     # Relazioni
     lease = relationship("Lease", back_populates="documents")
 
-class LeasePayment(Base):
-    __tablename__ = "lease_payments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
-    leaseId = Column(Integer, ForeignKey("leases.id"))
-    amount = Column(Float)
-    paymentDate = Column(Date)
-    paymentType = Column(String)
-    reference = Column(String)
-    notes = Column(Text, nullable=True)
-    createdAt = Column(DateTime, default=datetime.utcnow)
-    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    deletedAt = Column(DateTime, nullable=True)  # Per soft delete
-
-    # Relazione con User (nuova per multi-tenancy)
-    user = relationship("User", back_populates="lease_payments")
-
-    # Relazioni
-    lease = relationship("Lease", back_populates="payments")
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -394,6 +371,7 @@ class PaymentRecord(Base):
     paymentDate = Column(Date)
     paymentMethod = Column(String)  # 'cash', 'bankTransfer', 'creditCard', 'check'
     reference = Column(String, nullable=True)
+    status = Column(String, nullable=True, default='completed') # 'pending', 'completed', 'failed'
     notes = Column(Text, nullable=True)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
