@@ -80,6 +80,7 @@ class ApartmentBase(CamelCaseModel):
     status: str
     notes: Optional[str] = None
     utilityMetersInfo: Optional[Dict[str, str]] = None
+    hasLaundry: bool = False
     amenities: Optional[List[str]] = None
     images: Optional[List[str]] = None
 

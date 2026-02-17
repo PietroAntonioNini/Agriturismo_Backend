@@ -159,6 +159,7 @@ class Apartment(Base):
     utilityMetersInfo = Column(JSON, nullable=True)
     amenities = Column(JSON, nullable=True)  # Array di stringhe
     images = Column(JSON, nullable=True)  # Array di URL di immagini
+    hasLaundry = Column(Boolean, default=False)
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deletedAt = Column(DateTime, nullable=True)  # Per soft delete

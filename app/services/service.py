@@ -754,6 +754,9 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
     if user_id is not None:
         data["userId"] = user_id
     
+    # Fetch apartment to check hasLaundry
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == data.get("apartmentId")).first()
+    
     # Estrai le letture iniziali dal campo annidato initialReadings
     initial_readings = data.pop("initialReadings", None)
     if initial_readings:
@@ -769,6 +772,10 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
         }
 
         for u_type, (id_field, val_field, subtype) in utility_map.items():
+            # Skip laundry if apartment doesn't have it
+            if u_type == "electricity_laundry" and (not apartment or not apartment.hasLaundry):
+                continue
+
             r_id = initial_readings.get(id_field)
             r_val = initial_readings.get(val_field)
 
@@ -2175,6 +2182,8 @@ def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: 
         models.UtilityReading.readingDate <= date(prev_year, prev_month, 28) + timedelta(days=4)
     ).all()
     
+    apartment = db.query(models.Apartment).filter(models.Apartment.id == apartment_id).first()
+    
     items = []
     type_labels = {
         "electricity": "LUCE",
@@ -2185,6 +2194,8 @@ def get_detailed_utility_and_fixed_items(db: Session, apartment_id: int, month: 
     for r in readings:
         label = type_labels.get(r.type, r.type.upper())
         if r.subtype == "laundry":
+            if apartment and not apartment.hasLaundry:
+                continue
             label = "LUCE LAVANDERIA"
             
         unit = "kWh" if r.type == "electricity" else "m³"
@@ -2411,7 +2422,6 @@ def create_entry_invoice(db: Session, lease, user_id: int):
         issueDate=issue_date,
         dueDate=due_date,
         subtotal=0.0,
-        tax=0.0,
         total=lease.securityDeposit,
         notes="Fattura di ingresso - Caparra",
         userId=user_id
