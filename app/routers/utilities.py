@@ -88,6 +88,10 @@ def create_utility_reading(
     if not apartment:
         raise HTTPException(status_code=404, detail="Apartment not found")
     
+    # Standardizza il sottotipo per l'elettricità principale
+    if reading.type == "electricity" and not reading.subtype:
+        reading.subtype = "main"
+    
     # Prendi l'ultima lettura dello stesso tipo e sottotipo per calcolare il consumo
     last_reading = service.get_last_utility_reading(db, reading.apartmentId, reading.type, reading.subtype)
     
@@ -335,6 +339,10 @@ def create_bulk_utility_readings(
         apartment = service.get_apartment(db, reading_data.apartmentId)
         if not apartment:
             raise HTTPException(status_code=404, detail=f"Apartment {reading_data.apartmentId} not found")
+        
+        # Standardizza il sottotipo per l'elettricità principale
+        if reading_data.type == "electricity" and not reading_data.subtype:
+            reading_data.subtype = "main"
         
         # Get last reading for calculation
         last_reading = service.get_last_utility_reading(db, reading_data.apartmentId, reading_data.type, reading_data.subtype)

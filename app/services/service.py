@@ -765,7 +765,7 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
         
         # Mappa dei tipi utenza e dei relativi campi nel payload
         utility_map = {
-            "electricity": ("electricityReadingId", "electricityValue", None),
+            "electricity": ("electricityReadingId", "electricityValue", "main"),
             "water": ("waterReadingId", "waterValue", None),
             "gas": ("gasReadingId", "gasValue", None),
             "electricity_laundry": ("electricityLaundryReadingId", "electricityLaundryValue", "laundry")
@@ -779,15 +779,24 @@ def create_lease(db: Session, lease: schemas.LeaseCreate, user_id: Optional[int]
             r_id = initial_readings.get(id_field)
             r_val = initial_readings.get(val_field)
 
+            # Se abbiamo un ID passato esplicitamente nel payload, lo usiamo
             if r_id:
-                # Se abbiamo l'ID, lo usiamo direttamente
                 data[id_field] = r_id
+                continue
+
+            # Altrimenti, verifichiamo se esiste gia una lettura per questo appartamento/tipo/sottotipo
+            actual_type = u_type if u_type != "electricity_laundry" else "electricity"
+            last_reading = get_last_utility_reading(db, apt_id, actual_type, subtype)
+            
+            if last_reading:
+                # Se esiste gia una lettura (anche se il contratto e nuovo), la usiamo come baseline
+                data[id_field] = last_reading.id
             elif r_val is not None:
-                # Se abbiamo il valore, creiamo una lettura di sistema (baseline)
+                # Se NON esiste una lettura e abbiamo un valore iniziale, creiamo una lettura di sistema (baseline)
                 new_reading = models.UtilityReading(
                     userId=user_id,
                     apartmentId=apt_id,
-                    type=u_type if u_type != "electricity_laundry" else "electricity",
+                    type=actual_type,
                     subtype=subtype,
                     readingDate=start_date,
                     previousReading=r_val,
@@ -1017,7 +1026,10 @@ def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: 
         models.UtilityReading.type == type
     )
     
-    if subtype is not None:
+    if type == "electricity" and subtype == "main":
+        # Per l'elettricità principale, cerchiamo 'main' ma accettiamo None (legacy)
+        query = query.filter(or_(models.UtilityReading.subtype == "main", models.UtilityReading.subtype.is_(None)))
+    elif subtype is not None:
         query = query.filter(models.UtilityReading.subtype == subtype)
     
     return query.order_by(models.UtilityReading.readingDate.desc()).first()
@@ -1039,8 +1051,13 @@ def get_previous_utility_reading_for_chain(
     )
     if user_id is not None:
         query = query.filter(models.UtilityReading.userId == user_id)
-    if subtype is not None:
+        
+    if type == "electricity" and subtype == "main":
+        # Per l'elettricità principale, cerchiamo 'main' ma accettiamo None (legacy)
+        query = query.filter(or_(models.UtilityReading.subtype == "main", models.UtilityReading.subtype.is_(None)))
+    elif subtype is not None:
         query = query.filter(models.UtilityReading.subtype == subtype)
+        
     if exclude_id is not None:
         query = query.filter(models.UtilityReading.id != exclude_id)
     if hasattr(models.UtilityReading, "deletedAt"):
