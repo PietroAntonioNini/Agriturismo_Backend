@@ -127,6 +127,8 @@ class R2Manager:
             target_bucket = settings.bucket_documenti_inquilini
         elif file_type == 'contratto':
             target_bucket = settings.bucket_contratti
+        elif file_type == 'prospetto':
+            target_bucket = settings.bucket_prospetti
         else:
             return False
 
