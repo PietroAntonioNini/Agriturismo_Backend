@@ -257,6 +257,7 @@ class Lease(Base):
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+    hasPdf = Column(Boolean, default=False)
 
     # Letture iniziali (baseline) - aggiornate dopo ogni fattura mensile generata
     electricityReadingId = Column(Integer, ForeignKey("utility_readings.id"), nullable=True)
@@ -295,6 +296,7 @@ class LeaseDocument(Base):
     id = Column(Integer, primary_key=True, index=True)
     userId = Column(Integer, ForeignKey("users.id"), nullable=False)  # Multi-tenancy
     leaseId = Column(Integer, ForeignKey("leases.id"))
+    invoiceId = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     name = Column(String)
     type = Column(String)
     url = Column(String)
@@ -332,6 +334,7 @@ class Invoice(Base):
     createdAt = Column(DateTime, default=datetime.utcnow)
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deletedAt = Column(DateTime, nullable=True)  # Per soft delete
+    hasPdf = Column(Boolean, default=False)
 
     # Relazione con User (nuova per multi-tenancy)
     user = relationship("User", back_populates="invoices")

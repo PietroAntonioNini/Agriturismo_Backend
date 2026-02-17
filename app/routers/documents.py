@@ -21,7 +21,7 @@ from typing import Optional
 
 @router.post("/upload")
 async def upload_document(
-    id_entita: int = Form(...), # Può essere id_inquilino, id_contratto, etc.
+    id_entita: int = Form(...), # Se 'contratto' -> leaseId, se 'prospetto' -> invoiceId
     tipo_file: str = Form(...), # 'prospetto', 'contratto', 'documento_fronte', 'documento_retro'
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -36,6 +36,23 @@ async def upload_document(
         raise HTTPException(status_code=400, detail=f"Tipo file non valido. Ammessi: {', '.join(allowed_types)}")
 
     try:
+        # Recupera leaseId e altre info necessarie in base al tipo
+        target_lease_id = None
+        target_invoice_id = None
+        
+        if tipo_file == 'contratto':
+            target_lease_id = id_entita
+        elif tipo_file == 'prospetto':
+            invoice = db.query(models.Invoice).filter(models.Invoice.id == id_entita).first()
+            if not invoice:
+                raise HTTPException(status_code=404, detail="Fattura non trovata")
+            target_lease_id = invoice.leaseId
+            target_invoice_id = invoice.id
+        elif tipo_file in ['documento_fronte', 'documento_retro']:
+            # Per i documenti d'identità usiamo id_entita (tenantId) come sottocartella se necessario, 
+            # o lasciamo la logica esistente
+            pass
+
         # Leggi il contenuto del file
         content = await file.read()
         
@@ -43,11 +60,14 @@ async def upload_document(
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         safe_filename = "".join([c for c in file.filename if c.isalnum() or c in (' ', '.', '_', '-')]).strip()
         
-        # Non serve prefisso se ogni tipo ha il suo bucket dedicato
-        file_name = f"{id_entita}/{timestamp}_{safe_filename}"
+        # Determina il percorso R2 (file_name)
+        # Per contratti e prospetti usiamo SEMPRE il leaseId come prefisso
+        if tipo_file in ['contratto', 'prospetto']:
+            file_name = f"{target_lease_id}/{timestamp}_{safe_filename}"
+        else:
+            file_name = f"{id_entita}/{timestamp}_{safe_filename}"
         
         # Mappa il tipo file al bucket
-        # R2Manager mappa: 'prospetto', 'contratto', 'documento'
         r2_type = tipo_file
         if 'documento' in tipo_file:
             r2_type = 'documento'
@@ -59,13 +79,11 @@ async def upload_document(
             # --- LOGICA DATABASE ---
             try:
                 if tipo_file == 'contratto':
-                    # Crea record in LeaseDocument
-                    lease = db.query(models.Lease).filter(models.Lease.id == id_entita).first()
-                    if not lease:
-                        logger.warning(f"Lease {id_entita} non trovato per associazione contratto.")
-                    else:
+                    lease = db.query(models.Lease).filter(models.Lease.id == target_lease_id).first()
+                    if lease:
+                        lease.hasPdf = True
                         new_doc = models.LeaseDocument(
-                            leaseId=id_entita,
+                            leaseId=target_lease_id,
                             name=safe_filename,
                             type='contract',
                             url=file_name,
@@ -76,15 +94,12 @@ async def upload_document(
                         db.commit()
 
                 elif tipo_file == 'prospetto':
-                    # Crea record in LeaseDocument con type='prospectus'
-                    lease = db.query(models.Lease).filter(models.Lease.id == id_entita).first()
-                    if not lease:
-                        logger.warning(f"Lease {id_entita} non trovato per associazione prospetto.")
-                    else:
-                        # Opzionale: Se c'è già un prospetto eliminare il vecchio?
-                        # Per ora aggiungiamo come allegato
+                    invoice = db.query(models.Invoice).filter(models.Invoice.id == target_invoice_id).first()
+                    if invoice:
+                        invoice.hasPdf = True
                         new_doc = models.LeaseDocument(
-                            leaseId=id_entita,
+                            leaseId=target_lease_id,
+                            invoiceId=target_invoice_id,
                             name=safe_filename,
                             type='prospectus',
                             url=file_name,
@@ -95,18 +110,13 @@ async def upload_document(
                         db.commit()
                         
                 elif tipo_file in ['documento_fronte', 'documento_retro']:
-                    # Aggiorna Tenant
                     tenant = db.query(models.Tenant).filter(models.Tenant.id == id_entita).first()
-                    if not tenant:
-                        logger.warning(f"Tenant {id_entita} non trovato per associazione documento.")
-                    else:
+                    if tenant:
                         if tipo_file == 'documento_fronte':
-                            # Se c'è già un file R2, eliminalo
                             if tenant.documentFrontImage and not tenant.documentFrontImage.startswith('/'):
                                 r2_manager.delete_file(tenant.documentFrontImage, 'documento_fronte')
                             tenant.documentFrontImage = file_name
                         else:
-                            # Se c'è già un file R2, eliminalo
                             if tenant.documentBackImage and not tenant.documentBackImage.startswith('/'):
                                 r2_manager.delete_file(tenant.documentBackImage, 'documento_retro')
                             tenant.documentBackImage = file_name
@@ -114,13 +124,13 @@ async def upload_document(
                         
             except Exception as db_e:
                 logger.error(f"Errore aggiornamento DB: {db_e}")
-                # Non blocchiamo l'upload se il DB fallisce, ma logghiamo l'errore
-                # O potremmo fare roolback se necessario, ma il file è già su R2.
             
             return {"status": "success", "file_key": file_name, "message": "Caricamento completato e DB aggiornato"}
         else:
             raise HTTPException(status_code=500, detail="Errore durante l'upload su R2")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Errore upload documento: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -168,15 +178,10 @@ async def delete_document(
     # 1. Elimina da R2
     success = r2_manager.delete_file(file_key, tipo_file)
     if not success:
-         # Non blocchiamo se fallisce R2 (magari non esiste più), ma logghiamo
          logger.warning(f"Eliminazione R2 fallita o file non trovato: {file_key}")
 
     # 2. Aggiorna il DB
-    # Cerca se questo file_key è usato in Tenant
     if 'documento' in tipo_file:
-         # Cerca tenant che ha questo URL (esatta corrispondenza o parziale?)
-         # file_key è 'documenti_inquilini/ID/...'
-         # Nel DB salviamo il file_key intero
          tenant = db.query(models.Tenant).filter(
              (models.Tenant.documentFrontImage == file_key) | 
              (models.Tenant.documentBackImage == file_key)
@@ -191,11 +196,21 @@ async def delete_document(
              logger.info(f"Rimosso riferimento file {file_key} dal tenant {tenant.id}")
 
     elif tipo_file in ['contratto', 'prospetto']:
-        # Cerca in LeaseDocument
+         # Cerca in LeaseDocument
          doc = db.query(models.LeaseDocument).filter(models.LeaseDocument.url == file_key).first()
          if doc:
+             # Resetta hasPdf se il documento è di tipo contratto o prospetto
+             if doc.type == 'contract':
+                 lease = db.query(models.Lease).filter(models.Lease.id == doc.leaseId).first()
+                 if lease:
+                     lease.hasPdf = False
+             elif doc.type == 'prospectus' and doc.invoiceId:
+                 invoice = db.query(models.Invoice).filter(models.Invoice.id == doc.invoiceId).first()
+                 if invoice:
+                     invoice.hasPdf = False
+             
              db.delete(doc)
              db.commit()
-             logger.info(f"Eliminato record LeaseDocument per {file_key}")
+             logger.info(f"Eliminato record LeaseDocument per {file_key} e aggiornato flag hasPdf")
 
     return {"status": "success", "message": "Documento eliminato"}

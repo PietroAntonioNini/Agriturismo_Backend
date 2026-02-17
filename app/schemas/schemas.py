@@ -141,6 +141,7 @@ class DocumentResponse(CamelCaseModel):
 # ------------------ SCHEMA LEASE DOCUMENT ------------------
 class LeaseDocumentBase(CamelCaseModel):
     leaseId: int
+    invoiceId: Optional[int] = None
     name: str
     type: str
     url: str
@@ -211,6 +212,7 @@ class Lease(LeaseBase):
     waterReadingId: Optional[int] = None
     gasReadingId: Optional[int] = None
     electricityLaundryReadingId: Optional[int] = None
+    hasPdf: bool = False
 
     class Config:
         orm_mode = True
@@ -287,6 +289,7 @@ class InvoiceBase(CamelCaseModel):
     notes: Optional[str] = None
     reminderSent: bool = False
     reminderDate: Optional[date] = None
+    hasPdf: bool = False
 
 class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate]
