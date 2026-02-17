@@ -830,19 +830,8 @@ def delete_lease(db: Session, leaseId: int):
         try:
             from app.services.r2_manager import R2Manager
             r2 = R2Manager()
-            for doc in lease_docs:
-                 if doc.url:
-                     # Se è un URL R2 (non inizia con /), elimina da R2
-                     if not doc.url.startswith('/'):
-                         r2.delete_file(doc.url, 'contratto')
-                     # Se è locale
-                     else:
-                         try:
-                            file_path = f"static/leases/{leaseId}/documents/{os.path.basename(doc.url)}"
-                            if os.path.exists(file_path):
-                                os.remove(file_path)
-                         except:
-                             pass
+            # 1. Elimina cartella documenti/contratti da R2
+            r2.delete_folder(f"{leaseId}/", 'contratto')
             
             # 1.1 Elimina cartella fatture da R2 (Bucket prospetti-mensili)
             r2.delete_folder(f"{leaseId}/", 'prospetto')

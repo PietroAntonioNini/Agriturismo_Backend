@@ -270,8 +270,8 @@ class Lease(Base):
     # Relazioni
     tenant = relationship("Tenant", back_populates="leases")
     apartment = relationship("Apartment", back_populates="leases")
-    documents = relationship("LeaseDocument", back_populates="lease")
-    invoices = relationship("Invoice", back_populates="lease")
+    documents = relationship("LeaseDocument", back_populates="lease", cascade="all, delete-orphan")
+    invoices = relationship("Invoice", back_populates="lease", cascade="all, delete-orphan")
 
     # Relazioni con letture baseline (foreign_keys esplicite per evitare ambiguità)
     electricityReading = relationship("UtilityReading", foreign_keys=[electricityReadingId])
@@ -340,8 +340,8 @@ class Invoice(Base):
     lease = relationship("Lease", back_populates="invoices")
     tenant = relationship("Tenant", back_populates="invoices")
     apartment = relationship("Apartment", back_populates="invoices")
-    items = relationship("InvoiceItem", back_populates="invoice")
-    payments = relationship("PaymentRecord", back_populates="invoice")
+    items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+    payments = relationship("PaymentRecord", back_populates="invoice", cascade="all, delete-orphan")
 
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
