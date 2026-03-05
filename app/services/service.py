@@ -1023,7 +1023,9 @@ def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: 
     """Get the last utility reading for a specific apartment and type."""
     query = db.query(models.UtilityReading).filter(
         models.UtilityReading.apartmentId == apartmentId,
-        models.UtilityReading.type == type
+        models.UtilityReading.type == type,
+        # Escludi le letture speciali (baseline di contratto): non devono essere usate come "precedente"
+        models.UtilityReading.isSpecialReading == False
     )
     
     if subtype == "main":
@@ -1048,6 +1050,8 @@ def get_previous_utility_reading_for_chain(
         models.UtilityReading.apartmentId == apartmentId,
         models.UtilityReading.type == type,
         models.UtilityReading.readingDate < readingDate,
+        # Escludi le letture speciali (baseline di contratto)
+        models.UtilityReading.isSpecialReading == False
     )
     if user_id is not None:
         query = query.filter(models.UtilityReading.userId == user_id)
