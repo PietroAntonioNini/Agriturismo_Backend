@@ -1026,8 +1026,8 @@ def get_last_utility_reading(db: Session, apartmentId: int, type: str, subtype: 
         models.UtilityReading.type == type
     )
     
-    if type == "electricity" and subtype == "main":
-        # Per l'elettricità principale, cerchiamo 'main' ma accettiamo None (legacy)
+    if subtype == "main":
+        # Per le utenze principali, cerchiamo 'main' ma accettiamo None (legacy)
         query = query.filter(or_(models.UtilityReading.subtype == "main", models.UtilityReading.subtype.is_(None)))
     elif subtype is not None:
         query = query.filter(models.UtilityReading.subtype == subtype)
@@ -1052,8 +1052,8 @@ def get_previous_utility_reading_for_chain(
     if user_id is not None:
         query = query.filter(models.UtilityReading.userId == user_id)
         
-    if type == "electricity" and subtype == "main":
-        # Per l'elettricità principale, cerchiamo 'main' ma accettiamo None (legacy)
+    if subtype == "main":
+        # Per le utenze principali, cerchiamo 'main' ma accettiamo None (legacy)
         query = query.filter(or_(models.UtilityReading.subtype == "main", models.UtilityReading.subtype.is_(None)))
     elif subtype is not None:
         query = query.filter(models.UtilityReading.subtype == subtype)
